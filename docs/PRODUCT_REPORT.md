@@ -165,26 +165,25 @@ Mahina chuno, phir format chuno:
 
 ## 3. Update kaise karein (aapke PC par)
 
-1. Code lao (GitHub par push nahi ho paya, isliye bundle file se):
+1. Backend, kiosk aur frontend band karo (har window me Ctrl+C). Phir project folder me ye chalao:
 
    ```powershell
    cd "D:\DS PROJECTS\face-attendance"
-   git fetch .\feature-product-v2.bundle feature/product-v2:feature/product-v2
-   git checkout feature/product-v2
-   git push -u origin feature/product-v2      # GitHub par bhi chala jayega
+   powershell -ExecutionPolicy Bypass -File .\update_to_v2.ps1
    ```
 
-2. Backend me ek nayi library aayi hai (PDF ke liye):
+   Ye script ye sab karti hai:
+   - `backend\dev.db` aur `.env` ka backup leti hai
+   - `feature-product-v2.bundle` se v2 branch laati hai
+   - backup wapas rakh deti hai (**zaroori:** v2 me ye files git se hat gayi hain, isliye seedha `git checkout` inhe folder se mita deta)
+   - PDF ke liye nayi library (`reportlab`) install karti hai
+   - `npm install` chalati hai
 
-   ```powershell
-   cd backend
-   .venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   ```
+2. GitHub par bhejne ke liye: `git push -u origin feature/product-v2`
 
 3. Backend restart karo. Database ke 3 naye badlav (`0003`, `0004`, `0005`) **apne aap** lag jayenge. Aapki asli DB ki copy par ye test kiya gaya hai: 100 log aur 2472 events, sab sahi bache.
 4. Kiosk restart karo. Pehli baar liveness models (lagbhag 3.5 MB) GitHub se download honge, internet chahiye.
-5. Frontend: `npm install` (koi naya package nahi hai), phir `npm run dev` ya `npm run build`.
+5. Frontend: `npm run dev` ya `npm run build` (script ne `npm install` pehle hi chala diya hai).
 6. Har camera par liveness calibration karo (section 2.1).
 
 **Naye client ke liye** `docs/CLIENT_ONBOARDING.md` wale steps ke baad ye bhi karo:
