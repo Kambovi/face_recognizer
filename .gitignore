@@ -8,3 +8,19 @@ wheels/
 
 # Virtual environments
 .venv
+
+# --- never commit: dependencies, local data, secrets, build output ---
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+.env
+backend/dev.db
+backend/*.db
+backend/backups/
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
