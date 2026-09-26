@@ -16,6 +16,7 @@ class UnknownIdentityOut(BaseModel):
     best_crop_url: str | None = None
     status: str
     resolved_employee_id: str | None
+    watchlist_reason: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -31,6 +32,8 @@ class UnknownUpdateRequest(BaseModel):
     label: str | None = None
     notes: str | None = None
     status: Literal["OPEN", "IGNORED"] | None = None
+    # "" clears it; a reason puts the face on the watchlist.
+    watchlist_reason: str | None = Field(default=None, max_length=500)
 
 
 class LinkRequest(BaseModel):

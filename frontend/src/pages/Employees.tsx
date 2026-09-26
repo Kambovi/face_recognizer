@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
+import clsx from "clsx";
 import { DataTable } from "../components/DataTable";
 import { AuthImage } from "../components/AuthImage";
 import { PersonFields } from "../components/PersonFields";
@@ -118,6 +119,7 @@ function EmployeeDetailPanel({
     contractor: employee.contractor ?? "",
   });
   const [shiftId, setShiftId] = useState(employee.shift_id ?? "");
+  const [watchReason, setWatchReason] = useState(employee.watchlist_reason ?? "");
   const [enrolling, setEnrolling] = useState(false);
   const [consentPolicy, setConsentPolicy] = useState("v1");
   const [consentPurpose, setConsentPurpose] = useState("Biometric attendance enrollment");
@@ -140,6 +142,7 @@ function EmployeeDetailPanel({
         name: values.name.trim() || employee.name,
         ...personPayload(values),
         shift_id: shiftId || null,
+        watchlist_reason: watchReason.trim(),
       });
       onChanged();
     } catch (err) {
@@ -229,6 +232,18 @@ function EmployeeDetailPanel({
               </option>
             ))}
           </select>
+          <label className="col-span-2 block text-xs font-medium text-gray-700">
+            Watchlist reason <span className="font-normal text-gray-400">(filled = alert whenever this person is seen)</span>
+            <input
+              value={watchReason}
+              onChange={(e) => setWatchReason(e.target.value)}
+              placeholder="e.g. Dismissed, not allowed inside"
+              className={clsx(
+                "mt-1 w-full rounded-md border px-3 py-2 text-sm",
+                watchReason.trim() ? "border-red-300 bg-red-50" : "border-gray-300",
+              )}
+            />
+          </label>
           <div className="col-span-2 flex gap-2">
             <button onClick={handleSaveDetails} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
               Save details

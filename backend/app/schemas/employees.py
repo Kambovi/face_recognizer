@@ -33,6 +33,7 @@ class EmployeeUpdate(BaseModel):
     shift_id: str | None = None
     home_kiosk_id: str | None = None
     contractor: str | None = Field(default=None, max_length=120)
+    watchlist_reason: str | None = Field(default=None, max_length=500)
     is_active: bool | None = None
 
 
@@ -46,6 +47,7 @@ class EmployeeOut(BaseModel):
     shift_id: str | None
     home_kiosk_id: str | None = None
     contractor: str | None = None
+    watchlist_reason: str | None = None
     is_active: bool
     created_at: datetime
     template_count: int = 0

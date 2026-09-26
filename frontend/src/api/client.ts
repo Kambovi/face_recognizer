@@ -33,11 +33,15 @@ import type {
   UnknownIdentityOut,
   UnknownListResponse,
   UnknownUpdateRequest,
+  AlertOut,
   CameraRole,
   ContractorReport,
+  HqLink,
   MusterResponse,
   RosterAssign,
   RosterRow,
+  SiteOut,
+  WatchlistEntry,
 } from "./types";
 
 // Vite exposes build-time env vars via import.meta.env; falls back to the
@@ -343,6 +347,58 @@ export async function getMuster(): Promise<MusterResponse> {
 
 export async function setCameraRole(kioskId: string, role: CameraRole): Promise<void> {
   await http.patch(`/cameras/${encodeURIComponent(kioskId)}`, { role });
+}
+
+export async function getAlertCount(): Promise<{ open: number; latest_at: string | null }> {
+  const { data } = await http.get<{ open: number; latest_at: string | null }>("/alerts/count");
+  return data;
+}
+
+export async function listAlerts(openOnly = false, limit = 50): Promise<AlertOut[]> {
+  const { data } = await http.get<AlertOut[]>("/alerts", { params: { open_only: openOnly, limit } });
+  return data;
+}
+
+export async function ackAlert(id: string): Promise<void> {
+  await http.post(`/alerts/${id}/ack`);
+}
+
+export async function ackAllAlerts(): Promise<void> {
+  await http.post("/alerts/ack-all");
+}
+
+export async function getWatchlist(): Promise<WatchlistEntry[]> {
+  const { data } = await http.get<WatchlistEntry[]>("/alerts/watchlist");
+  return data;
+}
+
+export async function listSites(): Promise<SiteOut[]> {
+  const { data } = await http.get<SiteOut[]>("/hq/sites");
+  return data;
+}
+
+export async function createSite(name: string): Promise<SiteOut> {
+  const { data } = await http.post<SiteOut>("/hq/sites", { name });
+  return data;
+}
+
+export async function deleteSite(id: string): Promise<void> {
+  await http.delete(`/hq/sites/${id}`);
+}
+
+export async function getHqLink(): Promise<HqLink> {
+  const { data } = await http.get<HqLink>("/hq/link");
+  return data;
+}
+
+export async function setHqLink(url: string, token: string): Promise<HqLink> {
+  const { data } = await http.put<HqLink>("/hq/link", { url, token });
+  return data;
+}
+
+export async function testHqLink(): Promise<{ pushed: boolean; reason?: string }> {
+  const { data } = await http.post<{ pushed: boolean; reason?: string }>("/hq/link/test");
+  return data;
 }
 
 // -- analytics ------------------------------------------------------------------

@@ -73,6 +73,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "muster_window_hours": 16,
     # kiosk_id -> "entry" | "exit" | "both" (set from the Muster page).
     "camera_roles": {},
+    # --- Alerts ---
+    "alert_cooldown_minutes": 30,
+    "alert_on_spoof": True,
+    "spoof_alert_cooldown_minutes": 10,
     "device_preference": "auto",
     # Device-dependent: seeded from the resolved device profile at first
     # kiosk heartbeat (see routers/kiosk.py); these are the CPU-baseline

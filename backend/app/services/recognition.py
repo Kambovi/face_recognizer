@@ -16,6 +16,7 @@ from app.models.employees import Employee
 from app.models.enums import OwnerType, RejectReason, SubjectType
 from app.schemas.kiosk import KioskEventRequest
 from app.services import matching
+from app.services import alerts
 from app.services.shiftday import DEFAULT_NIGHT_TAIL_HOURS, load_resolver
 from app.services.attendance import RecognitionEventInput, local_date, upsert_attendance_event
 from app.services.media import save_base64_jpeg
@@ -71,6 +72,8 @@ async def process_kiosk_event(
             client_event_id=payload.client_event_id,
         )
         event, created = await upsert_attendance_event(db, data, dedupe_window)
+        if created:
+            await alerts.on_event(db, event, config)
         await db.commit()
         return RecognitionOutcome(event=event, created=created, face_id=None)
 
@@ -98,6 +101,7 @@ async def process_kiosk_event(
         event, created = await upsert_attendance_event(
             db, data, dedupe_window, day_of=lambda ts: resolver.attendance_date(employee.id, ts)
         )
+        await alerts.on_event(db, event, config, employee=employee)
         await db.commit()
         return RecognitionOutcome(event=event, created=created, face_id=employee.face_id)
 
@@ -128,5 +132,6 @@ async def process_kiosk_event(
         client_event_id=payload.client_event_id,
     )
     event, created = await upsert_attendance_event(db, data, dedupe_window)
+    await alerts.on_event(db, event, config, unknown=cluster_result.unknown)
     await db.commit()
     return RecognitionOutcome(event=event, created=created, face_id=cluster_result.unknown.face_id)

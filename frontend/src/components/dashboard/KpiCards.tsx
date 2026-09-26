@@ -62,7 +62,7 @@ export function KpiCards({ counts, active, onToggle }: KpiCardsProps): JSX.Eleme
   // shown relative to the same base rather than summed in).
   const base = counts.KNOWN_PRESENT + counts.UNKNOWN_PRESENT + counts.ABSENT;
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       {KPI_ORDER.map((kpi) => {
         const cfg = KPI_CONFIG[kpi];
         const isActive = active === kpi;
@@ -75,7 +75,7 @@ export function KpiCards({ counts, active, onToggle }: KpiCardsProps): JSX.Eleme
             aria-pressed={isActive}
             title={isActive ? "Click again to show all records" : `Show only ${cfg.label}`}
             className={clsx(
-              "flex flex-col gap-4 rounded-xl border bg-white p-4 text-left transition-all",
+              "flex flex-col gap-3 rounded-xl border bg-white p-3 text-left transition-all sm:gap-4 sm:p-4",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40",
               isActive ? cfg.active : "border-gray-200 shadow-sm hover:-translate-y-0.5 hover:shadow-md",
               active !== null && !isActive && "opacity-60 hover:opacity-100",
@@ -96,7 +96,7 @@ export function KpiCards({ counts, active, onToggle }: KpiCardsProps): JSX.Eleme
             <div>
               <p className="text-3xl font-semibold tabular-nums tracking-tight text-gray-900">{counts[kpi]}</p>
               <p className="mt-0.5 text-sm font-medium text-gray-700">{cfg.label}</p>
-              <p className="text-xs text-gray-500">{hints[kpi]}</p>
+              <p className="hidden text-xs text-gray-500 sm:block">{hints[kpi]}</p>
             </div>
             <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
               <div className={clsx("h-full rounded-full transition-all", cfg.bar)} style={{ width: `${pct}%` }} />

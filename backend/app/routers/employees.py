@@ -124,6 +124,8 @@ async def update_employee(
         changes["home_kiosk_id"] = None
     if "contractor" in changes:
         changes["contractor"] = (changes["contractor"] or "").strip() or None
+    if "watchlist_reason" in changes:
+        changes["watchlist_reason"] = (changes["watchlist_reason"] or "").strip() or None
     new_camera = changes.get("home_kiosk_id", employee.home_kiosk_id)
     new_active = changes.get("is_active", employee.is_active)
     await validate_assignment(

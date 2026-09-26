@@ -44,6 +44,7 @@ export interface EmployeeOut {
   shift_id: string | null;
   home_kiosk_id: string | null;
   contractor: string | null;
+  watchlist_reason: string | null;
   is_active: boolean;
   created_at: string;
   template_count: number;
@@ -73,6 +74,7 @@ export interface EmployeeUpdate {
   shift_id?: string | null;
   home_kiosk_id?: string | null;
   contractor?: string | null;
+  watchlist_reason?: string | null;
   is_active?: boolean;
 }
 
@@ -265,6 +267,8 @@ export interface UnknownUpdateRequest {
   label?: string | null;
   notes?: string | null;
   status?: "OPEN" | "IGNORED";
+  /** "" removes the face from the watchlist. */
+  watchlist_reason?: string;
 }
 
 export interface LinkRequest {
@@ -594,4 +598,64 @@ export interface MusterResponse {
   inside: MusterPerson[];
   visitors_inside: MusterVisitor[];
   left_count: number;
+}
+
+// -- alerts -------------------------------------------------------------------
+
+export interface AlertOut {
+  id: string;
+  created_at: string;
+  kind: "watchlist" | "spoof" | string;
+  kiosk_id: string;
+  title: string;
+  detail: string | null;
+  employee_id: string | null;
+  unknown_identity_id: string | null;
+  photo_url: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+}
+
+export interface WatchlistEntry {
+  type: "person" | "face";
+  id: string;
+  name: string;
+  code: string;
+  reason: string;
+  active: boolean;
+  photo_url: string | null;
+}
+
+// -- multi-site ----------------------------------------------------------------
+
+export interface SiteSnapshot {
+  org_name?: string;
+  date?: string;
+  roster?: number;
+  present?: number;
+  attendance_pct?: number;
+  late?: number;
+  unknown_visitors?: number;
+  cameras_total?: number;
+  cameras_online?: number;
+  cameras_liveness_off?: number;
+  open_alerts?: number;
+  inside_now?: number;
+  generated_at?: string;
+}
+
+export interface SiteOut {
+  id: string;
+  name: string;
+  created_at: string;
+  last_push_at: string | null;
+  snapshot: SiteSnapshot | null;
+  token?: string;
+}
+
+export interface HqLink {
+  url: string;
+  token_set: boolean;
+  last_push_at: string | null;
+  last_error: string | null;
 }

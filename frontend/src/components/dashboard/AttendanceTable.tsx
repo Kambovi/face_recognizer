@@ -61,7 +61,51 @@ export function AttendanceTable({ rows, sort, onSort, showDate, emptyMessage, on
   const colCount = columns.length + (onEdit ? 1 : 0);
 
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/* Phones: one card per person instead of a 10-column table. */}
+      <ul className="divide-y divide-gray-100 md:hidden">
+        {rows.length === 0 && <li className="px-4 py-12 text-center text-sm text-gray-500">{emptyMessage}</li>}
+        {rows.map((r) => (
+          <li key={r.key}>
+            <button
+              type="button"
+              disabled={!(onEdit && r.subject_id)}
+              onClick={onEdit && r.subject_id ? () => onEdit(r) : undefined}
+              className="flex w-full items-start gap-3 px-4 py-3 text-left enabled:active:bg-gray-50"
+            >
+              <Avatar record={r} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="truncate font-medium text-gray-900">{r.name}</span>
+                  <span className="shrink-0 tabular-nums text-xs text-gray-500">
+                    {formatClock(r.intime)}
+                    {r.outtime ? ` – ${formatClock(r.outtime)}` : ""}
+                  </span>
+                </span>
+                <span className="block truncate text-xs text-gray-500">
+                  {showDate ? `${formatDay(r.date)} · ` : ""}
+                  {r.emp_code ?? r.face_id}
+                  {r.department ? ` · ${r.department}` : ""}
+                </span>
+                <span className="mt-1 flex flex-wrap items-center gap-1">
+                  <StatusBadge record={r} />
+                  <OnTimePill value={r.on_time} />
+                  {r.exceptions.map((x, i) => (
+                    <span
+                      key={`${x.kind}-${i}`}
+                      className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
+                    >
+                      <TriangleAlert className="h-3 w-3" aria-hidden />
+                      {humanizeKind(x.kind)}
+                    </span>
+                  ))}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    <div className="hidden overflow-x-auto md:block">
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50">
           <tr>
@@ -158,6 +202,7 @@ export function AttendanceTable({ rows, sort, onSort, showDate, emptyMessage, on
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 

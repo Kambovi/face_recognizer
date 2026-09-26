@@ -37,6 +37,9 @@ class Employee(Base):
     # Labour contractor / agency supplying this person (None = own staff).
     # Drives the contractor-wise report used to verify contractor bills.
     contractor: Mapped[str | None] = mapped_column(sa.String(120), nullable=True, index=True)
+    # Set = on the watchlist: every sighting raises an alert (e.g. a
+    # dismissed worker who must not re-enter). None = not watchlisted.
+    watchlist_reason: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, default=utcnow

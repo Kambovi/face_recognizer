@@ -11,6 +11,8 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.routers import (
+    alerts,
+    hq,
     analytics,
     attendance,
     auth,
@@ -64,7 +66,17 @@ async def lifespan(_app: FastAPI):
             logger.info("migrations_applied")
         except Exception as exc:  # noqa: BLE001 - surface clearly, keep serving
             logger.error("migration_failed", error=str(exc)[:300])
+    push_task = None
+    if ":memory:" not in settings.database_url:
+        import asyncio
+
+        from app.db import AsyncSessionLocal
+        from app.services.multisite import push_loop
+
+        push_task = asyncio.create_task(push_loop(AsyncSessionLocal))
     yield
+    if push_task is not None:
+        push_task.cancel()
 
 
 app = FastAPI(title="Face Attendance API", version="1.0.0", lifespan=lifespan)
@@ -111,3 +123,5 @@ app.include_router(media.router, prefix=API_PREFIX)
 app.include_router(shifts.router, prefix=API_PREFIX)
 app.include_router(profile.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)
+app.include_router(alerts.router, prefix=API_PREFIX)
+app.include_router(hq.router, prefix=API_PREFIX)

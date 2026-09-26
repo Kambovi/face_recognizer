@@ -34,5 +34,7 @@ class UnknownIdentity(Base):
     resolved_by: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     notes: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    # Set = watchlisted face: every sighting raises an alert.
+    watchlist_reason: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
 
     __table_args__ = (sa.Index("ix_unknown_identities_status", "status"),)

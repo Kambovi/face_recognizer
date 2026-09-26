@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, Clock, EyeOff, Link2, Loader2, ScanFace, Trash2, UserPen, UserPlus, UserRoundX, X } from "lucide-react";
+import { CheckCircle2, Clock, EyeOff, Link2, Loader2, ScanFace, ShieldAlert, Trash2, UserPen, UserPlus, UserRoundX, X } from "lucide-react";
 import clsx from "clsx";
 import {
   createManualEvent,
@@ -34,7 +34,8 @@ type Tab =
   | "ignore"
   | "details"
   | "time"
-  | "wrong";
+  | "wrong"
+  | "watch";
 
 const DEFAULT_REASON = "Corrected from dashboard";
 
@@ -53,11 +54,13 @@ export function RecordDrawer({ record, onClose, onChanged }: RecordDrawerProps):
         { id: "register", label: `New ${profile.person_label.toLowerCase()}`, Icon: UserPlus },
         { id: "link", label: `Existing ${profile.person_label.toLowerCase()}`, Icon: Link2 },
         { id: "ignore", label: "Ignore / delete", Icon: EyeOff },
+        { id: "watch", label: "Watchlist", Icon: ShieldAlert },
       ]
     : [
         { id: "details", label: "Details", Icon: UserPen },
         { id: "time", label: isAbsent ? "Mark present" : "Fix time", Icon: Clock },
         ...(isAbsent ? [] : [{ id: "wrong" as Tab, label: "Wrong person", Icon: UserRoundX }]),
+        { id: "watch" as Tab, label: "Watchlist", Icon: ShieldAlert },
       ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.id ?? "details");
 
@@ -130,6 +133,7 @@ export function RecordDrawer({ record, onClose, onChanged }: RecordDrawerProps):
           {tab === "details" && <DetailsPanel record={record} onDone={onChanged} />}
           {tab === "time" && <TimePanel record={record} onDone={onChanged} />}
           {tab === "wrong" && <WrongPersonPanel record={record} onDone={onChanged} />}
+          {tab === "watch" && <WatchlistPanel record={record} onDone={onChanged} />}
         </div>
       </aside>
     </div>,
@@ -391,6 +395,45 @@ function IgnorePanel({ record, onDone }: { record: AttendanceRecord; onDone: (m:
           }
         />
       </div>
+    </>
+  );
+}
+
+function WatchlistPanel({ record, onDone }: { record: AttendanceRecord; onDone: (m: string) => void }): JSX.Element {
+  const [reason, setReason] = useState("");
+  const { busy, error, run } = useSubmit(onDone);
+  const isUnknown = record.category === "UNKNOWN_PRESENT";
+  return (
+    <>
+      <Note>
+        Every time {isUnknown ? "this face" : record.name} is seen by any camera, an alert pops up on the dashboard bell
+        (and on WhatsApp, if set up). Use it for dismissed staff, banned visitors or anyone security must watch for.
+        Remove people from the list on the Alerts page.
+      </Note>
+      <label className="mt-4 block text-xs font-medium text-gray-700">
+        Reason (shown with every alert)
+        <textarea
+          rows={3}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="e.g. Dismissed on 1 Sep, not allowed on premises"
+          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
+      </label>
+      <Footer
+        busy={busy}
+        error={error}
+        danger
+        disabled={reason.trim().length < 3}
+        label="Add to watchlist"
+        onClick={() =>
+          void run(async () => {
+            if (isUnknown) await updateUnknown(record.subject_id, { watchlist_reason: reason.trim() });
+            else await updateEmployee(record.subject_id, { watchlist_reason: reason.trim() });
+            return "Added to the watchlist.";
+          })
+        }
+      />
     </>
   );
 }

@@ -104,6 +104,8 @@ async def update_unknown(
         unknown.notes = payload.notes
     if payload.status is not None:
         unknown.status = UnknownStatus(payload.status)
+    if payload.watchlist_reason is not None:
+        unknown.watchlist_reason = payload.watchlist_reason.strip() or None
     await write_audit(db, user.id, "update", "unknown_identity", unknown.id, before=before, after=payload.model_dump(exclude_unset=True))
     await db.commit()
     return _to_out(unknown)
