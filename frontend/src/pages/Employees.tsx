@@ -115,6 +115,7 @@ function EmployeeDetailPanel({
     department: employee.department ?? "",
     designation: employee.designation ?? "",
     home_kiosk_id: employee.home_kiosk_id ?? "",
+    contractor: employee.contractor ?? "",
   });
   const [shiftId, setShiftId] = useState(employee.shift_id ?? "");
   const [enrolling, setEnrolling] = useState(false);
@@ -340,6 +341,7 @@ export function Employees(): JSX.Element {
       { header: profile.department_label, accessorFn: (row) => row.department ?? "--" },
       { header: profile.designation_label, accessorFn: (row) => row.designation ?? "--" },
       { header: "Home camera", accessorFn: (row) => row.home_kiosk_id ?? "--" },
+      { header: "Contractor", accessorFn: (row) => row.contractor ?? "Own staff" },
       { header: "Templates", accessorKey: "template_count" },
       {
         header: "Status",

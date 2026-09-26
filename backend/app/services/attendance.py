@@ -28,8 +28,9 @@ production guarantee.)
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -66,8 +67,16 @@ async def _find_by_client_event_id(db: AsyncSession, client_event_id: str) -> At
     return result.scalar_one_or_none()
 
 
+DayOf = Callable[[datetime], "date | str"]
+
+
 async def _events_today_for_subject(
-    db: AsyncSession, subject_type: SubjectType, employee_id: str | None, unknown_identity_id: str | None, day: str
+    db: AsyncSession,
+    subject_type: SubjectType,
+    employee_id: str | None,
+    unknown_identity_id: str | None,
+    day: "date | str",
+    day_of: DayOf | None = None,
 ) -> list[AttendanceEvent]:
     stmt = select(AttendanceEvent).where(AttendanceEvent.subject_type == subject_type)
     if subject_type == SubjectType.EMPLOYEE:
@@ -79,14 +88,23 @@ async def _events_today_for_subject(
         stmt = stmt.with_for_update()
     result = await db.execute(stmt)
     all_events = list(result.scalars().all())
-    return [e for e in all_events if local_date(e.occurred_at) == day]
+    key = day_of or local_date
+    return [e for e in all_events if key(e.occurred_at) == day]
 
 
 async def upsert_attendance_event(
-    db: AsyncSession, data: RecognitionEventInput, dedupe_window_minutes: float
+    db: AsyncSession,
+    data: RecognitionEventInput,
+    dedupe_window_minutes: float,
+    day_of: DayOf | None = None,
 ) -> tuple[AttendanceEvent, bool]:
     """Returns (event, created). `created=False` means an existing row was
-    updated in place (dedupe merge or idempotent replay)."""
+    updated in place (dedupe merge or idempotent replay).
+
+    `day_of` maps a timestamp to its attendance day; default is the local
+    calendar date. For employees the caller passes a shift-aware one
+    (services/shiftday.py) so a night shift's 22:00 IN and 06:00 OUT land
+    on the same day."""
 
     if data.client_event_id:
         existing = await _find_by_client_event_id(db, data.client_event_id)
@@ -114,9 +132,9 @@ async def upsert_attendance_event(
         await db.flush()
         return event, True
 
-    day = local_date(data.occurred_at)
+    day = (day_of or local_date)(data.occurred_at)
     todays_events = await _events_today_for_subject(
-        db, data.subject_type, data.employee_id, data.unknown_identity_id, day
+        db, data.subject_type, data.employee_id, data.unknown_identity_id, day, day_of
     )
 
     if not todays_events:

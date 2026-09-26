@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -19,6 +20,7 @@ from app.routers import (
     kiosk,
     media,
     profile,
+    reports,
     settings as settings_router,
     shifts,
     unknowns,
@@ -88,7 +90,10 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    return JSONResponse(status_code=422, content={"detail": "Validation error", "code": "validation_error", "errors": exc.errors()})
+    # jsonable_encoder: a custom validator's ValueError sits in `ctx` and is
+    # not JSON-serialisable -- without this the 422 turned into a 500.
+    errors = jsonable_encoder(exc.errors(), custom_encoder={Exception: str})
+    return JSONResponse(status_code=422, content={"detail": "Validation error", "code": "validation_error", "errors": errors})
 
 
 API_PREFIX = "/api/v1"
@@ -105,3 +110,4 @@ app.include_router(kiosk.router, prefix=API_PREFIX)
 app.include_router(media.router, prefix=API_PREFIX)
 app.include_router(shifts.router, prefix=API_PREFIX)
 app.include_router(profile.router, prefix=API_PREFIX)
+app.include_router(reports.router, prefix=API_PREFIX)

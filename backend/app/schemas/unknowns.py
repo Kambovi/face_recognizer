@@ -52,6 +52,7 @@ class PromoteRequest(BaseModel):
     designation: str | None = None
     shift_id: str | None = None
     home_kiosk_id: str | None = None
+    contractor: str | None = None
     # Optional at the schema level so a request that OMITS consent still
     # reaches the router's explicit check and gets a clear 422
     # {"code": "consent_required"} instead of a generic Pydantic validation

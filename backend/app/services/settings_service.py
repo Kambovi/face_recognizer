@@ -51,6 +51,24 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "unknown_recent_threshold": 0.30,
     "unknown_auto_ignore_days": 30,
     "working_days_per_week": 5,
+    # --- Timesheet / payroll (services/timesheet.py) ---
+    # Weekly off days, Mon=0 .. Sun=6. Used by timesheets and payroll exports.
+    "weekly_off_days": [6],
+    # A night shift's sightings up to this many hours after the shift ends
+    # count toward the shift's start date.
+    "night_shift_tail_hours": 4,
+    # Overtime = time after shift end, if at least `ot_min_minutes`, rounded
+    # DOWN to `ot_rounding_minutes`. On a weekly off, all worked time is OT.
+    "ot_enabled": True,
+    "ot_min_minutes": 30,
+    "ot_rounding_minutes": 15,
+    # Day status by hours worked (first to last sighting). 0 = off: any
+    # sighting is a full day (right for sites with only an entry camera).
+    "full_day_min_hours": 0,
+    "half_day_min_hours": 0,
+    # People with no roster row and no fixed shift: pick the shift whose
+    # start is nearest their first sighting (for late / OT maths).
+    "auto_shift_detect": True,
     "device_preference": "auto",
     # Device-dependent: seeded from the resolved device profile at first
     # kiosk heartbeat (see routers/kiosk.py); these are the CPU-baseline

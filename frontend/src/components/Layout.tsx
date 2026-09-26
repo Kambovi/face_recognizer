@@ -21,6 +21,8 @@ export function Layout(): JSX.Element {
     { to: "/analytics", label: "Analytics" },
     { to: "/employees", label: profile.person_label_plural },
     { to: "/unknowns", label: "Unknown faces" },
+    { to: "/reports", label: "Reports" },
+    { to: "/shifts", label: "Shifts" },
     { to: "/settings", label: "Settings", adminOnly: true },
   ];
 

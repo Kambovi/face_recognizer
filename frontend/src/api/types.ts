@@ -43,6 +43,7 @@ export interface EmployeeOut {
   designation: string | null;
   shift_id: string | null;
   home_kiosk_id: string | null;
+  contractor: string | null;
   is_active: boolean;
   created_at: string;
   template_count: number;
@@ -62,6 +63,7 @@ export interface EmployeeCreate {
   designation?: string | null;
   shift_id?: string | null;
   home_kiosk_id?: string | null;
+  contractor?: string | null;
 }
 
 export interface EmployeeUpdate {
@@ -70,6 +72,7 @@ export interface EmployeeUpdate {
   designation?: string | null;
   shift_id?: string | null;
   home_kiosk_id?: string | null;
+  contractor?: string | null;
   is_active?: boolean;
 }
 
@@ -283,6 +286,7 @@ export interface PromoteRequest {
   designation?: string | null;
   shift_id?: string | null;
   home_kiosk_id?: string | null;
+  contractor?: string | null;
   consent?: ConsentPayload | null;
   reason: string;
 }
@@ -477,3 +481,81 @@ export interface AnalyticsOverview {
   lowest_attendance: PersonStat[];
   most_late: PersonStat[];
 }
+
+// -- shifts / roster ----------------------------------------------------------
+
+export interface RosterRow {
+  id: string;
+  employee_id: string;
+  emp_code: string;
+  name: string;
+  shift_id: string;
+  shift_name: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface RosterAssign {
+  employee_ids: string[];
+  shift_id: string;
+  start_date: string;
+  end_date: string;
+}
+
+// -- reports ------------------------------------------------------------------
+
+export type DayStatus = "P" | "HD" | "A" | "WO" | "WOP" | "-";
+
+export interface PersonTotals {
+  days_in_range: number;
+  working_days: number;
+  present: number;
+  half_days: number;
+  absent: number;
+  weekly_off: number;
+  worked_on_off: number;
+  late_days: number;
+  late_minutes: number;
+  early_leave_minutes: number;
+  ot_hours: number;
+  worked_hours: number;
+  lop_days: number;
+  paid_days: number;
+}
+
+export interface ContractorDay {
+  date: string;
+  on_roll: number;
+  present: number;
+  half_day: number;
+  man_days: number;
+  ot_hours: number;
+}
+
+export interface ContractorPerson extends PersonTotals {
+  employee_id: string;
+  emp_code: string;
+  name: string;
+  department: string | null;
+  contractor: string;
+}
+
+export interface ContractorRow {
+  contractor: string;
+  headcount: number;
+  man_days: number;
+  ot_hours: number;
+  worked_hours: number;
+  late_days: number;
+  avg_daily_present: number;
+  daily: ContractorDay[];
+  people: ContractorPerson[];
+}
+
+export interface ContractorReport {
+  date_from: string;
+  date_to: string;
+  contractors: ContractorRow[];
+}
+
+export type PayrollFormat = "generic" | "tally" | "zoho" | "greythr" | "keka";

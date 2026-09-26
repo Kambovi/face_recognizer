@@ -33,6 +33,9 @@ import type {
   UnknownIdentityOut,
   UnknownListResponse,
   UnknownUpdateRequest,
+  ContractorReport,
+  RosterAssign,
+  RosterRow,
 } from "./types";
 
 // Vite exposes build-time env vars via import.meta.env; falls back to the
@@ -280,6 +283,54 @@ export interface ShiftCreate {
 
 export async function createShift(payload: ShiftCreate): Promise<ShiftOut> {
   const { data } = await http.post<ShiftOut>("/shifts", payload);
+  return data;
+}
+
+export async function updateShift(id: string, payload: Partial<ShiftCreate>): Promise<ShiftOut> {
+  const { data } = await http.patch<ShiftOut>(`/shifts/${id}`, payload);
+  return data;
+}
+
+export async function deleteShift(id: string): Promise<void> {
+  await http.delete(`/shifts/${id}`);
+}
+
+export async function listRoster(date_from: string, date_to: string): Promise<RosterRow[]> {
+  const { data } = await http.get<RosterRow[]>("/shifts/roster", { params: { date_from, date_to } });
+  return data;
+}
+
+export async function assignRoster(payload: RosterAssign): Promise<{ assigned: number }> {
+  const { data } = await http.post<{ assigned: number }>("/shifts/roster", payload);
+  return data;
+}
+
+export async function deleteRosterRow(id: string): Promise<void> {
+  await http.delete(`/shifts/roster/${id}`);
+}
+
+// -- reports ---------------------------------------------------------------------
+
+/** Authenticated file download (a plain <a href> can't send the token). */
+export async function downloadFile(path: string, params: Record<string, string | undefined>, filename: string): Promise<void> {
+  const res = await http.get<Blob>(path, { params, responseType: "blob" });
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function getContractorReport(date_from: string, date_to: string): Promise<ContractorReport> {
+  const { data } = await http.get<ContractorReport>("/reports/contractors", { params: { date_from, date_to } });
+  return data;
+}
+
+export async function listContractorNames(): Promise<string[]> {
+  const { data } = await http.get<string[]>("/reports/contractor-names");
   return data;
 }
 

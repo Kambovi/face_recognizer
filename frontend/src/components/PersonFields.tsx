@@ -1,5 +1,5 @@
 import type { CameraOut } from "../api/types";
-import type { PersonValues } from "./person";
+import { useContractorNames, type PersonValues } from "./person";
 import { useProfile } from "../profile/ProfileContext";
 
 // One set of "who is this person" inputs, shared by: register-from-dashboard,
@@ -26,6 +26,7 @@ export function PersonFields({ value, onChange, show = {}, currentCamera, camera
   const showName = show.name ?? true;
   const showCode = show.emp_code ?? true;
   const departments = profile.departments;
+  const contractors = useContractorNames();
   const legacyDept = value.department && departments.length > 0 && !departments.includes(value.department);
 
   return (
@@ -58,6 +59,22 @@ export function PersonFields({ value, onChange, show = {}, currentCamera, camera
       <Field label={profile.designation_label}>
         <input className={input} value={value.designation} onChange={(e) => set({ designation: e.target.value })} />
       </Field>
+      {value.contractor !== undefined && (
+        <Field label="Contractor / agency" hint="Blank = own staff" wide>
+          <input
+            className={input}
+            list="contractor-names"
+            value={value.contractor}
+            placeholder="e.g. Sharma Manpower Services"
+            onChange={(e) => set({ contractor: e.target.value })}
+          />
+          <datalist id="contractor-names">
+            {contractors.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </Field>
+      )}
       <Field label="Home camera" hint={`Max ${profile.max_enrolled_per_camera} per camera`} wide>
         <select className={input} value={value.home_kiosk_id} onChange={(e) => set({ home_kiosk_id: e.target.value })}>
           <option value="">— Not assigned —</option>

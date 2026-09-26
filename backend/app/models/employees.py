@@ -34,6 +34,9 @@ class Employee(Base):
     # for per-location headcount and the per-camera licence cap. Optional:
     # people without one are inferred from where they're usually seen.
     home_kiosk_id: Mapped[str | None] = mapped_column(sa.String(100), nullable=True, index=True)
+    # Labour contractor / agency supplying this person (None = own staff).
+    # Drives the contractor-wise report used to verify contractor bills.
+    contractor: Mapped[str | None] = mapped_column(sa.String(120), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, default=utcnow

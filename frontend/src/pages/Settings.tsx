@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { getSettings, updateSettings, toApiError } from "../api/client";
 
-type FieldKind = "number" | "boolean" | "string";
+type FieldKind = "number" | "boolean" | "string" | "weekdays";
+
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 interface FieldSpec {
   key: string;
@@ -30,7 +32,8 @@ const FIELD_GROUPS: { title: string; fields: FieldSpec[] }[] = [
     title: "Liveness",
     fields: [
       { key: "liveness_enabled", label: "Liveness check enabled", kind: "boolean" },
-      { key: "liveness_threshold", label: "Liveness pass threshold", kind: "number", step: 0.01 },
+      { key: "liveness_threshold", label: "Liveness pass threshold", kind: "number", step: 0.01, hint: "Calibrate per camera: python -m kiosk.liveness_check" },
+      { key: "liveness_required", label: "Reject faces if the anti-spoofing model is missing (recommended)", kind: "boolean" },
     ],
   },
   {
@@ -60,6 +63,19 @@ const FIELD_GROUPS: { title: string; fields: FieldSpec[] }[] = [
       { key: "bestshot_frames", label: "Best-shot buffer frames", kind: "number", step: 1 },
       { key: "ort_intra_op_threads", label: "ONNX Runtime intra-op threads", kind: "number", step: 1 },
       { key: "det_size", label: "Detector input size", kind: "string", hint: "e.g. 640,640" },
+    ],
+  },
+  {
+    title: "Payroll & overtime",
+    fields: [
+      { key: "weekly_off_days", label: "Weekly off", kind: "weekdays" },
+      { key: "ot_enabled", label: "Calculate overtime", kind: "boolean" },
+      { key: "ot_min_minutes", label: "Minimum OT (minutes)", kind: "number", step: 5, hint: "Less than this after shift end is ignored" },
+      { key: "ot_rounding_minutes", label: "Round OT down to (minutes)", kind: "number", step: 5 },
+      { key: "full_day_min_hours", label: "Full day needs at least (hours)", kind: "number", step: 0.5, hint: "0 = any sighting is a full day (entry camera only)" },
+      { key: "half_day_min_hours", label: "Below this is absent (hours)", kind: "number", step: 0.5, hint: "0 = off" },
+      { key: "night_shift_tail_hours", label: "Night shift: count sightings up to N hours after shift end", kind: "number", step: 1 },
+      { key: "auto_shift_detect", label: "Auto-detect shift for people without one", kind: "boolean" },
     ],
   },
   {
@@ -172,6 +188,38 @@ export function Settings(): JSX.Element {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {group.fields.map((field) => {
               const value = values[field.key];
+              if (field.kind === "weekdays") {
+                const days = Array.isArray(value) ? (value as number[]) : [];
+                return (
+                  <div key={field.key} className="sm:col-span-2">
+                    <span className="mb-1 block text-sm font-medium text-gray-700">{field.label}</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {WEEKDAYS.map((d, i) => {
+                        const on = days.includes(i);
+                        return (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() =>
+                              setValues((prev) => ({
+                                ...prev,
+                                [field.key]: on ? days.filter((x) => x !== i) : [...days, i].sort(),
+                              }))
+                            }
+                            className={
+                              on
+                                ? "rounded-md border border-brand-600 bg-brand-600 px-3 py-1.5 text-xs font-medium text-white"
+                                : "rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                            }
+                          >
+                            {d}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
               if (field.kind === "boolean") {
                 return (
                   <label key={field.key} className="flex items-center gap-2 text-sm text-gray-700">

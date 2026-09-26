@@ -16,6 +16,7 @@ from app.models.employees import Employee
 from app.models.enums import OwnerType, RejectReason, SubjectType
 from app.schemas.kiosk import KioskEventRequest
 from app.services import matching
+from app.services.shiftday import DEFAULT_NIGHT_TAIL_HOURS, load_resolver
 from app.services.attendance import RecognitionEventInput, local_date, upsert_attendance_event
 from app.services.media import save_base64_jpeg
 from app.services.unknown_identity import cluster_or_create_unknown
@@ -91,7 +92,12 @@ async def process_kiosk_event(
             reject_reason=None,
             client_event_id=payload.client_event_id,
         )
-        event, created = await upsert_attendance_event(db, data, dedupe_window)
+        resolver = await load_resolver(
+            db, [employee.id], float(config.get("night_shift_tail_hours", DEFAULT_NIGHT_TAIL_HOURS))
+        )
+        event, created = await upsert_attendance_event(
+            db, data, dedupe_window, day_of=lambda ts: resolver.attendance_date(employee.id, ts)
+        )
         await db.commit()
         return RecognitionOutcome(event=event, created=created, face_id=employee.face_id)
 

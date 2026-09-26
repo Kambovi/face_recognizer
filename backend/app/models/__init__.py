@@ -8,6 +8,7 @@ from app.models.employees import Employee  # noqa: F401
 from app.models.face_templates import FaceTemplate  # noqa: F401
 from app.models.kiosk_heartbeats import KioskHeartbeat  # noqa: F401
 from app.models.settings import Setting  # noqa: F401
+from app.models.shift_assignments import ShiftAssignment  # noqa: F401
 from app.models.shifts import Shift  # noqa: F401
 from app.models.unknown_identities import UnknownIdentity  # noqa: F401
 from app.models.users import User  # noqa: F401
@@ -21,6 +22,7 @@ __all__ = [
     "KioskHeartbeat",
     "Setting",
     "Shift",
+    "ShiftAssignment",
     "UnknownIdentity",
     "User",
 ]

@@ -283,6 +283,7 @@ async def promote_unknown_to_employee(
     shift_id: str | None,
     actor: str,
     home_kiosk_id: str | None = None,
+    contractor: str | None = None,
 ) -> Employee:
     from app.services.ids import next_employee_face_id
 
@@ -295,6 +296,7 @@ async def promote_unknown_to_employee(
         designation=designation,
         shift_id=shift_id,
         home_kiosk_id=home_kiosk_id or None,
+        contractor=(contractor or "").strip() or None,
         is_active=True,
     )
     db.add(employee)

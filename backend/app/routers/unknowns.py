@@ -167,6 +167,7 @@ async def promote_unknown(
     employee = await promote_unknown_to_employee(
         db, unknown, payload.name, payload.emp_code, payload.department, payload.designation, payload.shift_id, user.email,
         home_kiosk_id=payload.home_kiosk_id,
+        contractor=payload.contractor,
     )
     db.add(
         Consent(

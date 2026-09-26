@@ -72,6 +72,7 @@ async def create_employee(
         designation=payload.designation,
         shift_id=payload.shift_id,
         home_kiosk_id=payload.home_kiosk_id or None,
+        contractor=(payload.contractor or "").strip() or None,
     )
     db.add(employee)
     await db.flush()
@@ -121,6 +122,8 @@ async def update_employee(
     changes = payload.model_dump(exclude_unset=True)
     if "home_kiosk_id" in changes and not changes["home_kiosk_id"]:
         changes["home_kiosk_id"] = None
+    if "contractor" in changes:
+        changes["contractor"] = (changes["contractor"] or "").strip() or None
     new_camera = changes.get("home_kiosk_id", employee.home_kiosk_id)
     new_active = changes.get("is_active", employee.is_active)
     await validate_assignment(

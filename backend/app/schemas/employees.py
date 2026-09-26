@@ -23,6 +23,7 @@ class EmployeeCreate(BaseModel):
     designation: str | None = None
     shift_id: str | None = None
     home_kiosk_id: str | None = None
+    contractor: str | None = Field(default=None, max_length=120)
 
 
 class EmployeeUpdate(BaseModel):
@@ -31,6 +32,7 @@ class EmployeeUpdate(BaseModel):
     designation: str | None = None
     shift_id: str | None = None
     home_kiosk_id: str | None = None
+    contractor: str | None = Field(default=None, max_length=120)
     is_active: bool | None = None
 
 
@@ -43,6 +45,7 @@ class EmployeeOut(BaseModel):
     designation: str | None
     shift_id: str | None
     home_kiosk_id: str | None = None
+    contractor: str | None = None
     is_active: bool
     created_at: datetime
     template_count: int = 0
