@@ -1,12 +1,12 @@
 import { Fragment, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Download, FileSpreadsheet, HardHat, Wallet } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, FileSpreadsheet, FileText, HardHat, Wallet } from "lucide-react";
 import clsx from "clsx";
 import { downloadFile, getContractorReport, listContractorNames, toApiError } from "../api/client";
 import type { ContractorReport, PayrollFormat } from "../api/types";
 import { useProfile } from "../profile/ProfileContext";
 import { todayIsoDate } from "../utils/format";
 
-type Tab = "contractors" | "payroll" | "muster";
+type Tab = "contractors" | "payroll" | "muster" | "monthly";
 
 const input =
   "rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20";
@@ -32,6 +32,7 @@ export function Reports(): JSX.Element {
     { id: "contractors", label: "Contractor bill check", icon: HardHat },
     { id: "payroll", label: "Payroll export", icon: Wallet },
     { id: "muster", label: "Muster roll", icon: FileSpreadsheet },
+    { id: "monthly", label: "Monthly PDF", icon: FileText },
   ];
   return (
     <div className="space-y-5">
@@ -57,6 +58,7 @@ export function Reports(): JSX.Element {
       {tab === "contractors" && <Contractors />}
       {tab === "payroll" && <Payroll />}
       {tab === "muster" && <Muster />}
+      {tab === "monthly" && <MonthlyPdf />}
     </div>
   );
 }
@@ -426,6 +428,40 @@ function Muster(): JSX.Element {
         className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
       >
         <Download className="h-4 w-4" aria-hidden /> Download muster roll
+      </button>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------- monthly PDF
+function MonthlyPdf(): JSX.Element {
+  const today = todayIsoDate();
+  const [month, setMonth] = useState(prevMonth(today));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <section className="max-w-2xl space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <p className="text-sm text-gray-600">
+        A 2-page report for the owner or management review: attendance %, man-days, late arrivals, overtime, a day-by-day
+        chart, department and contractor tables, and who needs attention.
+      </p>
+      <label className="block max-w-xs text-xs font-medium text-gray-700">
+        Month
+        <input type="month" className={clsx(input, "block w-full")} value={month} max={today.slice(0, 7)} onChange={(e) => setMonth(e.target.value)} />
+      </label>
+      {error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      <button
+        disabled={busy || !month}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          void downloadFile("/reports/monthly.pdf", { month }, `attendance_${month}.pdf`)
+            .catch((e) => setError(toApiError(e).detail))
+            .finally(() => setBusy(false));
+        }}
+        className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+      >
+        <Download className="h-4 w-4" aria-hidden /> {busy ? "Preparing..." : "Download PDF"}
       </button>
     </section>
   );

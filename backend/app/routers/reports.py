@@ -241,6 +241,25 @@ async def payroll_export(
     return _csv(table, f"payroll_{format}_{month}.csv")
 
 
+# ---------------------------------------------------------------- monthly PDF
+@router.get("/monthly.pdf")
+async def monthly_report_pdf(
+    month: str = Query(pattern=r"^\d{4}-\d{2}$", description="YYYY-MM"),
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+) -> Response:
+    from app.services.pdf_report import monthly_pdf
+
+    y, m = (int(x) for x in month.split("-"))
+    if not 1 <= m <= 12:
+        raise http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, "bad_month", "month must be YYYY-MM")
+    start = date(y, m, 1)
+    end = date(y, m, calendar.monthrange(y, m)[1])
+    pdf = await monthly_pdf(db, start, end)
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="attendance_{month}.pdf"'})
+
+
 # ---------------------------------------------------------------- muster roll
 @router.get("/muster-roll.csv")
 async def muster_roll(

@@ -26,5 +26,5 @@ warn_unused_ignores = true
 # hide a genuinely missing first-party module), each is listed explicitly
 # below so a real "no module named app.foo" typo still fails mypy.
 [[tool.mypy.overrides]]
-module = ["insightface.*", "onnxruntime.*", "cv2.*", "pgvector.*"]
+module = ["insightface.*", "onnxruntime.*", "cv2.*", "pgvector.*", "reportlab.*"]
 ignore_missing_imports = true

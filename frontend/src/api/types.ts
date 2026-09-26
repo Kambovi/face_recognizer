@@ -659,3 +659,24 @@ export interface HqLink {
   last_push_at: string | null;
   last_error: string | null;
 }
+
+// -- notifications ------------------------------------------------------------
+
+export interface NotifyConfig {
+  channel: "off" | "whatsapp" | "webhook";
+  recipients: string[];
+  phone_number_id: string;
+  template_alert: string;
+  template_daily: string;
+  template_monthly: string;
+  template_language: string;
+  webhook_url: string;
+  send_alerts: boolean;
+  send_daily: boolean;
+  daily_time: string;
+  send_monthly: boolean;
+  last_daily: string | null;
+  last_monthly: string | null;
+  last_error: string | null;
+  access_token_set: boolean;
+}

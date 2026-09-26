@@ -174,7 +174,7 @@ async def test_contractor_report_and_csv(client, admin_headers, db_session, defa
     assert names == ["Sharma Manpower"]
 
     csv_r = await client.get("/api/v1/reports/contractors.csv?date_from=2026-09-21&date_to=2026-09-22", headers=admin_headers)
-    lines = list(csv.reader(io.StringIO(csv_r.text.lstrip("﻿"))))
+    lines = list(csv.reader(io.StringIO(csv_r.text.lstrip("\ufeff"))))
     assert lines[0][0] == "Contractor"
     assert ["Sharma Manpower", "TOTAL", "2", "", "", "3.0", "0.0"] in lines
 
@@ -182,37 +182,46 @@ async def test_contractor_report_and_csv(client, admin_headers, db_session, defa
 async def test_payroll_formats(client, admin_headers, db_session, default_shift):
     await set_setting(db_session, "weekly_off_days", [5, 6])
     a = await _person(db_session, "P1")
-    for day in range(1, 31):
-        d = date(2026, 9, day)
-        if d.weekday() < 5 and day != 15:
+    for day in range(1, 32):
+        d = date(2026, 8, day)
+        if d.weekday() < 5 and day != 14:
             _seen(db_session, a, at(d, 9, 0))
     await db_session.commit()
 
-    r = await client.get("/api/v1/reports/payroll?month=2026-09&format=generic", headers=admin_headers)
-    rows = list(csv.DictReader(io.StringIO(r.text.lstrip("﻿"))))
+    r = await client.get("/api/v1/reports/payroll?month=2026-08&format=generic", headers=admin_headers)
+    rows = list(csv.DictReader(io.StringIO(r.text.lstrip("\ufeff"))))
     assert rows[0]["Emp ID"] == "P1"
-    assert rows[0]["Working days"] == "22" and rows[0]["Absent"] == "1"
-    assert rows[0]["LOP days"] == "1.0" and rows[0]["Paid days"] == "29.0"
+    assert rows[0]["Working days"] == "21" and rows[0]["Absent"] == "1"
+    assert rows[0]["LOP days"] == "1.0" and rows[0]["Paid days"] == "30.0"
 
-    keka = await client.get("/api/v1/reports/payroll?month=2026-09&format=keka", headers=admin_headers)
+    keka = await client.get("/api/v1/reports/payroll?month=2026-08&format=keka", headers=admin_headers)
     assert keka.text.lstrip("﻿").splitlines()[0] == "Employee Number,Employee Name,Payable Days,Loss Of Pay Days,Overtime Hours"
 
-    tally = await client.get("/api/v1/reports/payroll?month=2026-09&format=tally&tally_company=Acme", headers=admin_headers)
+    tally = await client.get("/api/v1/reports/payroll?month=2026-08&format=tally&tally_company=Acme", headers=admin_headers)
     assert tally.headers["content-type"].startswith("application/xml")
     assert "<SVCURRENTCOMPANY>Acme</SVCURRENTCOMPANY>" in tally.text
-    assert "<NAME>Person P1</NAME><ATTENDANCETYPE>Present</ATTENDANCETYPE><ATTDTYPEVALUE> 29.0</ATTDTYPEVALUE>" in tally.text
+    assert "<NAME>Person P1</NAME><ATTENDANCETYPE>Present</ATTENDANCETYPE><ATTDTYPEVALUE> 30.0</ATTDTYPEVALUE>" in tally.text
 
 
 async def test_muster_roll_grid(client, admin_headers, db_session, default_shift):
     a = await _person(db_session, "M1")
-    _seen(db_session, a, at(MON, 9, 0))
+    _seen(db_session, a, at(date(2026, 8, 17), 9, 0))
     await db_session.commit()
-    r = await client.get("/api/v1/reports/muster-roll.csv?date_from=2026-09-21&date_to=2026-09-27", headers=admin_headers)
-    rows = list(csv.reader(io.StringIO(r.text.lstrip("﻿"))))
-    assert rows[0][4:11] == ["21 Sep", "22 Sep", "23 Sep", "24 Sep", "25 Sep", "26 Sep", "27 Sep"]
+    r = await client.get("/api/v1/reports/muster-roll.csv?date_from=2026-08-17&date_to=2026-08-23", headers=admin_headers)
+    rows = list(csv.reader(io.StringIO(r.text.lstrip("\ufeff"))))
+    assert rows[0][4:11] == ["17 Aug", "18 Aug", "19 Aug", "20 Aug", "21 Aug", "22 Aug", "23 Aug"]
     assert rows[1][4:11] == ["P", "A", "A", "A", "A", "A", "WO"]
 
 
 async def test_report_range_is_capped(client, admin_headers):
     r = await client.get("/api/v1/reports/timesheet?date_from=2026-01-01&date_to=2026-12-31", headers=admin_headers)
     assert r.status_code == 422
+
+
+async def test_future_days_are_not_absent(db_session, default_shift):
+    from datetime import timedelta
+
+    a = await _person(db_session, "F1")
+    today = datetime.now(IST).date()
+    ts = await build_timesheet(db_session, today, today + timedelta(days=3))
+    assert [ts.records[(a.id, today + timedelta(days=i))].status for i in (1, 2, 3)] == ["-", "-", "-"]

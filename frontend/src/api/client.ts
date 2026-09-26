@@ -38,6 +38,7 @@ import type {
   ContractorReport,
   HqLink,
   MusterResponse,
+  NotifyConfig,
   RosterAssign,
   RosterRow,
   SiteOut,
@@ -398,6 +399,26 @@ export async function setHqLink(url: string, token: string): Promise<HqLink> {
 
 export async function testHqLink(): Promise<{ pushed: boolean; reason?: string }> {
   const { data } = await http.post<{ pushed: boolean; reason?: string }>("/hq/link/test");
+  return data;
+}
+
+export async function getNotifyConfig(): Promise<NotifyConfig> {
+  const { data } = await http.get<NotifyConfig>("/notify/config");
+  return data;
+}
+
+export async function saveNotifyConfig(payload: Partial<NotifyConfig> & { access_token?: string }): Promise<NotifyConfig> {
+  const { data } = await http.put<NotifyConfig>("/notify/config", payload);
+  return data;
+}
+
+export async function testNotify(): Promise<{ sent: boolean; error: string | null }> {
+  const { data } = await http.post<{ sent: boolean; error: string | null }>("/notify/test");
+  return data;
+}
+
+export async function sendDailyNow(): Promise<{ sent: boolean; text: string; error: string | null }> {
+  const { data } = await http.post<{ sent: boolean; text: string; error: string | null }>("/notify/daily-now");
   return data;
 }
 

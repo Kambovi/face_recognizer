@@ -8,7 +8,7 @@ and a status code:
   P    present            HD   half day (below `full_day_min_hours`)
   A    absent             WO   weekly off
   WOP  worked on a weekly off (all worked time is overtime)
-  -    not on the roster yet (joined later) -- not counted anywhere
+  -    not on the roster yet (joined later), or a future date -- not counted anywhere
 
 Rules (all tunable in Settings, see settings_service.DEFAULT_SETTINGS):
   * Sightings are grouped into attendance days shift-aware (shiftday.py),
@@ -232,12 +232,14 @@ async def build_timesheet(
             by_day[(e.employee_id, resolver.attendance_date(e.employee_id, e.occurred_at))].append(e)
 
     days = _daterange(date_from, date_to)
+    today = datetime.now(LOCAL_TZ).date()
     records: dict[tuple[str, date], DayRecord] = {}
     for p in people:
         joined = p.created_at.astimezone(LOCAL_TZ).date()
         for d in days:
             evs = by_day.get((p.id, d), [])
-            if d < joined and not evs:
+            # not on the roll yet, or a day that hasn't happened: counted nowhere
+            if (d < joined or d > today) and not evs:
                 records[(p.id, d)] = DayRecord(p.id, d, "-")
                 continue
             shift = resolver.explicit(p.id, d)

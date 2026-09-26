@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.routers import (
     alerts,
     hq,
+    notify,
     analytics,
     attendance,
     auth,
@@ -72,8 +73,9 @@ async def lifespan(_app: FastAPI):
 
         from app.db import AsyncSessionLocal
         from app.services.multisite import push_loop
+        from app.services.notify import schedule_loop
 
-        push_task = asyncio.create_task(push_loop(AsyncSessionLocal))
+        push_task = asyncio.gather(push_loop(AsyncSessionLocal), schedule_loop(AsyncSessionLocal))
     yield
     if push_task is not None:
         push_task.cancel()
@@ -125,3 +127,4 @@ app.include_router(profile.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)
 app.include_router(alerts.router, prefix=API_PREFIX)
 app.include_router(hq.router, prefix=API_PREFIX)
+app.include_router(notify.router, prefix=API_PREFIX)
