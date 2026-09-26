@@ -271,7 +271,7 @@ function ContractorDetail({ row }: { row: ContractorReport["contractors"][number
 // ---------------------------------------------------------------- payroll
 const FORMATS: { id: PayrollFormat; label: string; note: string }[] = [
   { id: "generic", label: "Excel / CSV (all columns)", note: "Every figure: present, half days, absent, weekly off, paid days, LOP, late, OT." },
-  { id: "tally", label: "Tally Prime (XML)", note: "Import in Tally: Gateway → Import → Vouchers. Names must match the employee names in Tally." },
+  { id: "tally", label: "Tally Prime (XML)", note: "In Tally Prime: Import → Transactions. Names must match the employee names in Tally; test on a copy of the company first." },
   { id: "zoho", label: "Zoho Payroll (CSV)", note: "Paid days, LOP days and OT hours per Employee ID." },
   { id: "greythr", label: "greytHR (CSV)", note: "Paid days, LOP days and OT hours per Employee No." },
   { id: "keka", label: "Keka (CSV)", note: "Payable days, loss-of-pay days and overtime per Employee Number." },
