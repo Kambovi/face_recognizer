@@ -186,7 +186,7 @@ Mahina chuno, phir format chuno:
 5. Frontend: `npm run dev` ya `npm run build` (script ne `npm install` pehle hi chala diya hai).
 6. Har camera par liveness calibration karo (section 2.1).
 
-**Naye client ke liye** `docs/CLIENT_ONBOARDING.md` wale steps ke baad ye bhi karo:
+**Naye client ke liye** `docs/CLIENT_DEPLOYMENT.md` wale steps ke baad ye bhi karo:
 
 - Contractors ke naam daalo
 - Shifts aur roster set karo
@@ -248,6 +248,6 @@ Mahina chuno, phir format chuno:
 2. **Week 2–4.** Enrol staff, set shifts and contractors, connect payroll and WhatsApp.
 3. **Go-live.** Training for HR and security, then monthly review with the PDF report.
 
-*Suggested pricing (validate in pilots): one-time setup plus a per-camera (entry point) monthly subscription. See the earlier pricing note for ranges.*
+*Pricing: one-time setup plus a per-camera (entry point) monthly subscription — see `BUSINESS_PLAYBOOK.md`.*
 
 ![Dashboard](images/dashboard_alerts.png)

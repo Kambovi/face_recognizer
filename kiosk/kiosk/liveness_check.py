@@ -78,7 +78,7 @@ def main() -> None:  # pragma: no cover - needs a camera
     checker = LivenessChecker(cfg.model_cache_dir)
     checker.load(providers)
     if not checker.available:
-        raise SystemExit("Liveness models could not be loaded -- see the kiosk log / docs/RUNBOOK.md.")
+        raise SystemExit("Liveness models could not be loaded -- see the kiosk log / docs/PROJECT_BIBLE.md section 13.")
     source = make_frame_source(cfg.camera_source)
     scores: list[float] = []
     end = time.monotonic() + args.seconds

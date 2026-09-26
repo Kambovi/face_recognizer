@@ -1,5 +1,7 @@
 # Face Attendance
 
+> **Start here:** [`docs/PROJECT_BIBLE.md`](docs/PROJECT_BIBLE.md) (how everything works, runs and deploys) · [`docs/CLIENT_DEPLOYMENT.md`](docs/CLIENT_DEPLOYMENT.md) (installing at a client) · [`docs/BUSINESS_PLAYBOOK.md`](docs/BUSINESS_PLAYBOOK.md) · [`docs/FORMS_AND_TEMPLATES.md`](docs/FORMS_AND_TEMPLATES.md) · [`docs/PRODUCT_REPORT.md`](docs/PRODUCT_REPORT.md) (features + client pitch)
+
 A production-grade, single-site kiosk face-recognition attendance system
 for a ~100-employee office: a camera-facing kiosk process that detects,
 liveness-checks, and recognizes faces locally; a FastAPI + Postgres/pgvector
