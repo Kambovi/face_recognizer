@@ -40,7 +40,7 @@ logger = structlog.get_logger(__name__)
 _DEFAULT_SETTINGS: dict[str, Any] = {
     "min_face_pixels": 80,
     "liveness_enabled": True,
-    "liveness_threshold": 0.75,
+    "liveness_threshold": 0.5,  # calibrate per camera: python -m kiosk.liveness_check
     "liveness_required": True,
     "bestshot_frames": 5,
     "capture_fps": 6,

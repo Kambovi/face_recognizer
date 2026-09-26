@@ -34,7 +34,7 @@ class PipelineConfig:
     kiosk_id: str
     min_face_pixels: int = 80
     liveness_enabled: bool = True
-    liveness_threshold: float = 0.75
+    liveness_threshold: float = 0.5
     # When liveness is enabled but no anti-spoofing model could be loaded:
     # True -> reject every face (fail-closed; a photo can never mark
     # attendance, and the install problem is loud), False -> accept

@@ -19,7 +19,7 @@ from app.models.settings import Setting
 DEFAULT_SETTINGS: dict[str, Any] = {
     "similarity_threshold": 0.38,
     "liveness_enabled": True,
-    "liveness_threshold": 0.75,
+    "liveness_threshold": 0.5,  # calibrate per camera: python -m kiosk.liveness_check
     # Fail-closed: if the anti-spoofing model can't load, reject faces
     # instead of silently accepting photos (see kiosk/kiosk/liveness.py).
     "liveness_required": True,
