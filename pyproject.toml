@@ -1,0 +1,19 @@
+[project]
+name = "face-attendance"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "mohdbilalhaider54@gmail.com", email = "mohdbilalhaider54@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "docker>=7.2.0",
+]
+
+[project.scripts]
+face-attendance = "face_attendance:main"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"

@@ -1,0 +1,111 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-face_attendance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_dev_only}
+      POSTGRES_DB: ${POSTGRES_DB:-face_attendance}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-face_attendance} -d ${POSTGRES_DB:-face_attendance}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "127.0.0.1:5432:5432"
+    mem_limit: 512m
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        ORT_FLAVOR: ${ORT_FLAVOR:-cpu}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://face_attendance:change_me_dev_only@db:5432/face_attendance}
+      DATABASE_URL_SYNC: ${DATABASE_URL_SYNC:-postgresql+psycopg2://face_attendance:change_me_dev_only@db:5432/face_attendance}
+      JWT_SECRET: ${JWT_SECRET:-dev_only_change_me_to_a_long_random_string}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-480}
+      EMBEDDING_ENCRYPTION_KEY: ${EMBEDDING_ENCRYPTION_KEY:-Uh6Z8s4y6b0e7z3v1c9x2q5w8n1m4k7j0h3g6f9d2s5=}
+      KIOSK_SERVICE_TOKEN: ${KIOSK_SERVICE_TOKEN:-dev_only_kiosk_service_token}
+      DEVICE_PREFERENCE: ${DEVICE_PREFERENCE:-auto}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+      MODEL_CACHE_DIR: ${MODEL_CACHE_DIR:-/models}
+      INSIGHTFACE_MODEL_NAME: ${INSIGHTFACE_MODEL_NAME:-buffalo_l}
+    volumes:
+      - media:/data/media
+      - models:/models
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    mem_limit: 1536m
+    # --- Uncomment to run the API's own ONNX warmup on a GPU box -----------
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  kiosk:
+    build:
+      context: ./kiosk
+      dockerfile: Dockerfile
+      args:
+        ORT_FLAVOR: ${ORT_FLAVOR:-cpu}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_BASE_URL: ${API_BASE_URL:-http://api:8000}
+      KIOSK_ID: ${KIOSK_ID:-kiosk-01}
+      KIOSK_SERVICE_TOKEN: ${KIOSK_SERVICE_TOKEN:-dev_only_kiosk_service_token}
+      CAMERA_SOURCE: ${CAMERA_SOURCE:-synthetic}
+      DEVICE_PREFERENCE: ${DEVICE_PREFERENCE:-auto}
+      MODEL_CACHE_DIR: ${MODEL_CACHE_DIR:-/models}
+      INSIGHTFACE_MODEL_NAME: ${INSIGHTFACE_MODEL_NAME:-buffalo_l}
+    volumes:
+      - models:/models
+      - kiosk_queue:/data/queue
+    mem_limit: 1024m
+    # --- Uncomment on a GPU box (see README "Upgrading to GPU") -------------
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+    mem_limit: 128m
+
+volumes:
+  pgdata:
+  media:
+  models:
+  kiosk_queue:

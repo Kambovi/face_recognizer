@@ -1,0 +1,28 @@
+[tool.ruff]
+target-version = "py311"
+# Virtualenvs are dev-machine-local and never part of the actual deployed
+# image (the Dockerfile installs into the container's system site-packages,
+# not a .venv) -- excluded here so `make lint` checks this project's own
+# code regardless of what a contributor happens to have named their local
+# venv, rather than only "passing by accident" because .venv-test currently
+# has no findings.
+extend-exclude = [".venv", ".venv-test", "venv"]
+
+# Deliberately left at ruff's own default lint selection (E4, E7, E9, F --
+# no E501 line-length, no import-sort) rather than opting into a stricter
+# rule set: this codebase was written and reviewed against that default
+# (with no pyproject.toml at all, `ruff check .` was already running under
+# it), and turning on more categories now would flag long-but-readable
+# lines across many existing, already-reviewed files for a purely cosmetic
+# reason unrelated to why this config file was added (excluding venvs).
+
+[tool.mypy]
+python_version = "3.11"
+exclude = ["^\\.venv.*/", "^venv/"]
+warn_unused_ignores = true
+# insightface/onnxruntime/cv2 ship no py.typed marker / stubs. Listed
+# explicitly (rather than a blanket ignore_missing_imports) so a genuine
+# "no module named kiosk.foo" typo still fails mypy.
+[[tool.mypy.overrides]]
+module = ["insightface.*", "onnxruntime.*", "cv2.*"]
+ignore_missing_imports = true

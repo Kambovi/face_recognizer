@@ -1,0 +1,69 @@
+default
+Email: admin@example.com
+Password: ChangeMe123!
+
+
+
+
+Complete Step-by-Step (Backend + Frontend)
+STEP 1: Backend venv activate karo aur packages install karo
+powershell
+cd "D:\DS PROJECTS\face-attendance\backend"
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt -r requirements-dev.txt
+pip install onnxruntime==1.19.2
+
+⏳ Isme thoda time lagega (insightface, opencv jaisi heavy libraries hain).
+
+STEP 2: Environment variables set karo (isi window me)
+powershell
+$env:DATABASE_URL="sqlite+aiosqlite:///./dev.db"
+$env:DATABASE_URL_SYNC="sqlite:///./dev.db"
+$env:EMBEDDING_ENCRYPTION_KEY="Uh6Z8s4y6b0e7z3v1c9x2q5w8n1m4k7j0h3g6f9d2s5="
+$env:JWT_SECRET="dev_secret_change_me"
+$env:KIOSK_SERVICE_TOKEN="dev_token"
+STEP 3: Database migrate karo
+powershell
+alembic upgrade head
+
+Success message aana chahiye ("Running upgrade...").
+
+STEP 4: Demo data seed karo
+powershell
+python scripts/seed_demo.py
+
+✅ Terminal output me admin email/password print hoga — usko note kar lo, login ke liye chahiye.
+
+STEP 5: Backend server start karo
+powershell
+uvicorn app.main:app --reload
+#   FRONTEND
+npm run dev
+
+KIOSK:
+python -m kiosk.main
+############ agr laptop camera set na ho to is cmd ko terminal me run karo$env:CAMERA_SOURCE="0"
+$env:API_BASE_URL="http://localhost:8000"
+$env:KIOSK_SERVICE_TOKEN="dev_token"
+uv run python -m kiosk.main
+
+
+Ye window open hi rakhna (band mat karna). Confirm karne ke liye browser me kholo:
+
+http://localhost:8000/api/v1/health
+
+"status":"ok" dikhna chahiye.
+
+STEP 6: Naya PowerShell window kholo — Frontend chalao
+powershell
+cd "D:\DS PROJECTS\face-attendance\frontend"
+npm install
+npm run dev
+
+Terminal me ek URL milega, usually:
+
+http://localhost:5173
+STEP 7: Dashboard kholo aur login karo
+
+Browser me http://localhost:5173 kholo → Step 4 wale email/password se login karo.
