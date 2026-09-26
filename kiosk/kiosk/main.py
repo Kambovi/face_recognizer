@@ -41,6 +41,7 @@ _DEFAULT_SETTINGS: dict[str, Any] = {
     "min_face_pixels": 80,
     "liveness_enabled": True,
     "liveness_threshold": 0.75,
+    "liveness_required": True,
     "bestshot_frames": 5,
     "capture_fps": 6,
     "motion_pixel_threshold": 25,
@@ -114,6 +115,7 @@ def build_pipeline_config(kiosk_id: str, settings: dict[str, Any]) -> PipelineCo
         min_face_pixels=int(merged["min_face_pixels"]),
         liveness_enabled=bool(merged["liveness_enabled"]),
         liveness_threshold=float(merged["liveness_threshold"]),
+        liveness_required=bool(merged["liveness_required"]),
         bestshot_frames=int(merged["bestshot_frames"]),
         capture_fps=int(merged["capture_fps"]),
         motion_gate_config=motion_cfg,
@@ -211,7 +213,7 @@ def run(config: KioskConfig | None = None) -> None:  # pragma: no cover - exerci
                 last_settings_refresh = now
 
             if now - last_heartbeat >= config.heartbeat_seconds:
-                api_client.post_heartbeat(config.kiosk_id, device_info)
+                api_client.post_heartbeat(config.kiosk_id, {**device_info, "liveness": liveness_checker.status()})
                 last_heartbeat = now
 
             if now - last_replay >= config.heartbeat_seconds:

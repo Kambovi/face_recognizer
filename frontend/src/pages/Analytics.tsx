@@ -396,6 +396,11 @@ function LocationsSection({ locations, people, latestLabel }: { locations: Locat
                     {l.online ? "Online" : "Offline"}
                   </span>
                 </div>
+                {l.online && l.liveness === "off" && (
+                  <p className="mt-2 rounded-md bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700">
+                    Anti-spoofing OFF: model not loaded on this camera
+                  </p>
+                )}
                 <p className="mt-3 text-3xl font-semibold tracking-tight text-gray-900">
                   {l.present_latest_day}
                   <span className="text-lg font-normal text-gray-400"> / {l.roster}</span>

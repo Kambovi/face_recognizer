@@ -68,7 +68,11 @@ def offline_queue(tmp_path):
 
 @pytest.fixture
 def passthrough_liveness():
-    checker = LivenessChecker(model_cache_dir="/tmp/models")  # never loaded -> available=False -> always passes
+    # A loaded checker that always says "live" (liveness is fail-closed now,
+    # so an unloaded checker would reject every face).
+    checker = LivenessChecker(model_cache_dir="/tmp/models")
+    checker.inject_for_tests(object())
+    checker.check = lambda frame, box: 0.99  # type: ignore[method-assign]
     return checker
 
 
@@ -270,3 +274,38 @@ def test_replay_offline_queue_leaves_still_failing_events_queued(offline_queue, 
     replayed = pipeline.replay_offline_queue()
     assert replayed == 0
     assert offline_queue.count() == 1
+
+
+def _one_visit(pipeline) -> None:
+    now = 0.0
+    pipeline.process_frame(_flat_frame(), now=now)
+    for _ in range(6):
+        now += 0.1
+        pipeline.process_frame(_visitor_frame(), now=now)
+
+
+def test_missing_liveness_model_rejects_faces_when_required(offline_queue):
+    """Fail-closed: no anti-spoofing model + liveness_required -> nobody is
+    matched (a held-up photo can't mark attendance on a broken install)."""
+    engine = _CountingFaceEngine()
+    unloaded = LivenessChecker(model_cache_dir="/tmp/models")
+    sent: list[dict] = []
+    pipeline = _make_pipeline(engine, unloaded, offline_queue, post_event_fn=lambda p: sent.append(p) or True)
+    _one_visit(pipeline)
+    assert len(sent) == 1
+    assert sent[0]["reject_reason"] == "liveness_failed"
+    assert sent[0]["liveness_score"] is None
+    assert engine.embed_calls == 0
+
+
+def test_missing_liveness_model_accepts_faces_when_not_required(offline_queue):
+    engine = _CountingFaceEngine()
+    unloaded = LivenessChecker(model_cache_dir="/tmp/models")
+    sent: list[dict] = []
+    pipeline = _make_pipeline(
+        engine, unloaded, offline_queue, post_event_fn=lambda p: sent.append(p) or True, liveness_required=False
+    )
+    _one_visit(pipeline)
+    assert len(sent) == 1
+    assert sent[0].get("reject_reason") is None
+    assert sent[0]["embedding"] is not None

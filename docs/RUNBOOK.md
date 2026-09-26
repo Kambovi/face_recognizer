@@ -74,16 +74,16 @@ container can reach `github.com`/the insightface release CDN, or
 pre-populate the `models` named volume out of band (download once, `docker
 cp` the files into the volume) for an air-gapped site.
 
-**MiniFASNet liveness permanently unavailable even with network access.**
-`kiosk/kiosk/liveness.py`'s `MODEL_SHA256` is currently a documented
-placeholder (see `docs/DECISIONS.md`) because the build environment this
-was authored in couldn't reach the real upstream URL to compute the
-genuine digest — every download will fail its checksum check and liveness
-will report unavailable (fail-open: every face treated as live) forever,
-even with perfect network access. **This must be fixed before relying on
-liveness in production**: download `2.7_80x80_MiniFASNetV2.onnx` from the
-Silent-Face-Anti-Spoofing project yourself, compute its real SHA-256, and
-update `MODEL_SHA256` in `kiosk/kiosk/liveness.py`.
+**Liveness (anti-spoofing).** Fixed 2026-09-26: the kiosk now downloads
+two pinned MiniFASNet ONNX models (V2 + V1SE, SHA-256 verified) into
+`{MODEL_CACHE_DIR}/minifasnet/` and averages them. For an offline site, copy
+`MiniFASNetV2.onnx` and `MiniFASNetV1SE.onnx` there by hand. If they can't
+load, the camera card on Analytics shows "Anti-spoofing OFF" and, with
+`liveness_required` = true (default), faces are rejected rather than
+accepted -- fix the model files, don't just turn the setting off.
+Calibrate `liveness_threshold` per camera at install:
+`python -m kiosk.liveness_check --label real`, then `--label spoof`
+(phone photo held up), then `--recommend`.
 
 **`GET /health` shows `device.stale: true` but the kiosk container is
 clearly running.** Check `KIOSK_SERVICE_TOKEN` matches between `api` and

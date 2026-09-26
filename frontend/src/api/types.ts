@@ -388,7 +388,11 @@ export interface CameraOut {
   enrolled: number;
   cap: number;
   online: boolean;
+  liveness: LivenessState;
 }
+
+/** Anti-spoofing status from the camera's last heartbeat. */
+export type LivenessState = "on" | "off" | "unknown";
 
 // -- analytics overview -----------------------------------------------------------
 
@@ -430,6 +434,7 @@ export interface LocationStat {
   attendance_pct: number;
   unknown_visitors_latest_day: number;
   online: boolean;
+  liveness: LivenessState;
   assigned: number;
 }
 

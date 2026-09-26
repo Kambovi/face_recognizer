@@ -35,6 +35,11 @@ class PipelineConfig:
     min_face_pixels: int = 80
     liveness_enabled: bool = True
     liveness_threshold: float = 0.75
+    # When liveness is enabled but no anti-spoofing model could be loaded:
+    # True -> reject every face (fail-closed; a photo can never mark
+    # attendance, and the install problem is loud), False -> accept
+    # (fail-open, the pre-2026-09-26 behaviour).
+    liveness_required: bool = True
     bestshot_frames: int = 5
     bestshot_window_seconds: float = 1.5
     capture_fps: int = 6
@@ -175,9 +180,13 @@ class RecognitionPipeline:
         best_face = DetectedFace(box=best.box, kps=best.kps, det_score=best.det_score)
 
         liveness_score: float | None = None
-        if self.config.liveness_enabled and self.liveness_checker.available:
-            liveness_score = self.liveness_checker.check(best.frame, best.box)
-            if liveness_score < self.config.liveness_threshold:
+        if self.config.liveness_enabled and (self.liveness_checker.available or self.config.liveness_required):
+            if self.liveness_checker.available:
+                liveness_score = self.liveness_checker.check(best.frame, best.box)
+                failed = liveness_score < self.config.liveness_threshold
+            else:  # model missing + fail-closed
+                failed = True
+            if failed:
                 payload = self._base_payload(occurred_at)
                 payload.update(
                     {

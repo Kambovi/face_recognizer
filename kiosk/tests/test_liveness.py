@@ -74,7 +74,8 @@ def test_preprocess_output_shape_is_nchw_80x80():
     arr = checker._preprocess(_frame(), (100.0, 100.0, 300.0, 340.0))
     assert arr.shape == (1, 3, 80, 80)
     assert arr.dtype == np.float32
-    assert arr.min() >= 0.0 and arr.max() <= 1.0
+    # raw 0..255 BGR -- MiniFASNet was trained without /255 normalisation
+    assert arr.max() == pytest.approx(128.0)
 
 
 def test_preprocess_handles_a_box_at_the_frame_edge_without_crashing():
@@ -94,3 +95,50 @@ def test_load_failure_disables_liveness_without_raising(monkeypatch):
     checker.load(["CPUExecutionProvider"])  # must not raise
     assert checker.available is False
     assert checker.check(_frame(), (0.0, 0.0, 10.0, 10.0)) == 1.0  # safe default
+
+
+def test_ensemble_averages_every_loaded_model():
+    from kiosk.liveness import MODELS
+
+    checker = LivenessChecker(model_cache_dir="/tmp/models")
+    checker.inject_for_tests(_FakeSession([0.0, 10.0, 0.0]), MODELS[0])  # ~1.0 live
+    checker.inject_for_tests(_FakeSession([10.0, 0.0, 0.0]), MODELS[1])  # ~0.0 live
+    assert checker.check(_frame(), (100.0, 100.0, 300.0, 340.0)) == pytest.approx(0.5, abs=0.01)
+    assert checker.status() == {"available": True, "models": [m.filename for m in MODELS]}
+
+
+def test_each_model_gets_its_own_crop_scale():
+    from kiosk.liveness import crop_for_model
+
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    frame[200:280, 280:360] = 255  # the "face"
+    box = (280.0, 200.0, 360.0, 280.0)
+    tight = crop_for_model(frame, box, 2.7)
+    wide = crop_for_model(frame, box, 4.0)
+    # the wider crop shows more dark background around the bright face
+    assert wide.mean() < tight.mean()
+
+
+def test_real_weights_if_present_score_is_a_probability():
+    """Runs only where the pinned ONNX weights are cached (CI / a dev box):
+    loads both real models and checks the output is a sane probability."""
+    import os
+
+    cache = os.environ.get("LIVENESS_TEST_MODEL_DIR")
+    if not cache:
+        pytest.skip("set LIVENESS_TEST_MODEL_DIR to a folder containing minifasnet/*.onnx")
+    pytest.importorskip("onnxruntime")
+    checker = LivenessChecker(model_cache_dir=cache)
+    checker.load(["CPUExecutionProvider"])
+    assert checker.models_loaded == 2
+    rng = np.random.default_rng(0)
+    frame = rng.integers(0, 255, (480, 640, 3), dtype=np.uint8)
+    score = checker.check(frame, (250.0, 150.0, 390.0, 330.0))
+    assert 0.0 <= score <= 1.0
+
+
+def test_calibration_recommends_midpoint_between_real_and_spoof():
+    from kiosk.liveness_check import recommend
+
+    assert recommend({"real": [0.9] * 10, "spoof": [0.1] * 10}) == 0.5
+    assert recommend({"real": [0.9]}) is None

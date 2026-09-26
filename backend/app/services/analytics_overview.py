@@ -35,6 +35,7 @@ from app.models.employees import Employee
 from app.models.enums import EventType, SubjectType
 from app.models.kiosk_heartbeats import KioskHeartbeat
 from app.models.shifts import Shift
+from app.services.roster import liveness_state
 
 LOCAL_TZ = ZoneInfo("Asia/Kolkata")
 MANUAL_KIOSK = "manual"
@@ -230,6 +231,7 @@ async def compute_overview(
             "attendance_pct": _pct(got, exp),
             "unknown_visitors_latest_day": visitors_today,
             "online": online,
+            "liveness": liveness_state(hb.device_json if hb is not None else None),
             "assigned": sum(1 for p in people if p.home_kiosk_id == kid),
         })
     locations.sort(key=lambda r: (-r["roster"], r["kiosk_id"]))

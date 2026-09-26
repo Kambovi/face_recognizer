@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # --- never commit: dependencies, local data, secrets, build output ---
-node_modules/
+node_modules
 frontend/dist/
 *.tsbuildinfo
 .env

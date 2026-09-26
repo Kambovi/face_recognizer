@@ -20,6 +20,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "similarity_threshold": 0.38,
     "liveness_enabled": True,
     "liveness_threshold": 0.75,
+    # Fail-closed: if the anti-spoofing model can't load, reject faces
+    # instead of silently accepting photos (see kiosk/kiosk/liveness.py).
+    "liveness_required": True,
     "dedupe_window_minutes": 5,
     "min_face_pixels": 80,
     "crop_retention_days": 90,

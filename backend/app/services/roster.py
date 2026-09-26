@@ -56,6 +56,15 @@ async def validate_assignment(
             )
 
 
+def liveness_state(device_json: dict[str, Any] | None) -> str:
+    """'on' / 'off' from the kiosk's last heartbeat; 'unknown' for kiosks
+    older than the 2026-09-26 liveness fix (they don't report it)."""
+    info = (device_json or {}).get("liveness")
+    if not isinstance(info, dict):
+        return "unknown"
+    return "on" if info.get("available") else "off"
+
+
 async def camera_overview(db: AsyncSession) -> list[dict[str, Any]]:
     """Every known camera with how many people are enrolled at it vs the cap."""
     profile = await get_profile(db)
@@ -79,5 +88,11 @@ async def camera_overview(db: AsyncSession) -> list[dict[str, Any]]:
         if hb is not None:
             seen = hb.last_seen_at if hb.last_seen_at.tzinfo else hb.last_seen_at.replace(tzinfo=timezone.utc)
             online = now - seen < ONLINE_WINDOW
-        out.append({"kiosk_id": kiosk_id, "enrolled": enrolled.get(kiosk_id, 0), "cap": cap, "online": online})
+        out.append({
+            "kiosk_id": kiosk_id,
+            "enrolled": enrolled.get(kiosk_id, 0),
+            "cap": cap,
+            "online": online,
+            "liveness": liveness_state(hb.device_json if hb is not None else None),
+        })
     return out
