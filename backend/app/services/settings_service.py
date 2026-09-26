@@ -69,6 +69,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # People with no roster row and no fixed shift: pick the shift whose
     # start is nearest their first sighting (for late / OT maths).
     "auto_shift_detect": True,
+    # Emergency muster: how far back a sighting still counts (covers a night shift).
+    "muster_window_hours": 16,
+    # kiosk_id -> "entry" | "exit" | "both" (set from the Muster page).
+    "camera_roles": {},
     "device_preference": "auto",
     # Device-dependent: seeded from the resolved device profile at first
     # kiosk heartbeat (see routers/kiosk.py); these are the CPU-baseline

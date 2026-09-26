@@ -11,6 +11,7 @@ import { Employees } from "./pages/Employees";
 import { Settings } from "./pages/Settings";
 import { Reports } from "./pages/Reports";
 import { Shifts } from "./pages/Shifts";
+import { Muster } from "./pages/Muster";
 
 export function App(): JSX.Element {
   return (
@@ -32,6 +33,7 @@ export function App(): JSX.Element {
           <Route path="/settings" element={<Settings />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/shifts" element={<Shifts />} />
+          <Route path="/muster" element={<Muster />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

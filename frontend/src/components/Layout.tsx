@@ -1,6 +1,6 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import clsx from "clsx";
-import { Building2, GraduationCap, Hospital, type LucideIcon } from "lucide-react";
+import { Building2, GraduationCap, Hospital, Siren, type LucideIcon } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useProfile } from "../profile/ProfileContext";
 import type { OrgType } from "../api/types";
@@ -28,7 +28,7 @@ export function Layout(): JSX.Element {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-gray-200 bg-white">
+      <header className="border-b border-gray-200 bg-white print:hidden">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex flex-wrap items-center gap-6">
             <span className="flex items-center gap-2">
@@ -61,6 +61,13 @@ export function Layout(): JSX.Element {
             </nav>
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              to="/muster"
+              className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+              title="Emergency muster: who is inside right now"
+            >
+              <Siren className="h-4 w-4" aria-hidden /> Emergency
+            </Link>
             <span className="text-sm text-gray-500">
               {user?.email} <span className="text-gray-400">({user?.role})</span>
             </span>

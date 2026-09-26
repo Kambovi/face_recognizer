@@ -33,7 +33,9 @@ import type {
   UnknownIdentityOut,
   UnknownListResponse,
   UnknownUpdateRequest,
+  CameraRole,
   ContractorReport,
+  MusterResponse,
   RosterAssign,
   RosterRow,
 } from "./types";
@@ -332,6 +334,15 @@ export async function getContractorReport(date_from: string, date_to: string): P
 export async function listContractorNames(): Promise<string[]> {
   const { data } = await http.get<string[]>("/reports/contractor-names");
   return data;
+}
+
+export async function getMuster(): Promise<MusterResponse> {
+  const { data } = await http.get<MusterResponse>("/muster");
+  return data;
+}
+
+export async function setCameraRole(kioskId: string, role: CameraRole): Promise<void> {
+  await http.patch(`/cameras/${encodeURIComponent(kioskId)}`, { role });
 }
 
 // -- analytics ------------------------------------------------------------------

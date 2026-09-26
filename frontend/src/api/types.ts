@@ -393,7 +393,10 @@ export interface CameraOut {
   cap: number;
   online: boolean;
   liveness: LivenessState;
+  role: CameraRole;
 }
+
+export type CameraRole = "entry" | "exit" | "both";
 
 /** Anti-spoofing status from the camera's last heartbeat. */
 export type LivenessState = "on" | "off" | "unknown";
@@ -559,3 +562,36 @@ export interface ContractorReport {
 }
 
 export type PayrollFormat = "generic" | "tally" | "zoho" | "greythr" | "keka";
+
+// -- emergency muster ----------------------------------------------------------
+
+export interface MusterPerson {
+  employee_id: string;
+  emp_code: string;
+  name: string;
+  department: string | null;
+  designation: string | null;
+  contractor: string | null;
+  last_seen_at: string;
+  last_camera: string;
+  photo_url: string | null;
+}
+
+export interface MusterVisitor {
+  unknown_id: string;
+  face_id: string;
+  label: string | null;
+  last_seen_at: string;
+  last_camera: string;
+  photo_url: string | null;
+}
+
+export interface MusterResponse {
+  generated_at: string;
+  window_hours: number;
+  cameras: { kiosk_id: string; role: CameraRole }[];
+  has_exit_camera: boolean;
+  inside: MusterPerson[];
+  visitors_inside: MusterVisitor[];
+  left_count: number;
+}

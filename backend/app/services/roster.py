@@ -13,6 +13,7 @@ from app.models.attendance_events import AttendanceEvent
 from app.models.employees import Employee
 from app.models.kiosk_heartbeats import KioskHeartbeat
 from app.services.client_profile import get_profile
+from app.services.muster import camera_roles
 
 ONLINE_WINDOW = timedelta(minutes=5)
 
@@ -80,6 +81,7 @@ async def camera_overview(db: AsyncSession) -> list[dict[str, Any]]:
     ).all()
     enrolled = {k: int(n) for k, n in enrolled_rows}
     now = datetime.now(timezone.utc)
+    roles = await camera_roles(db)
     out = []
     event_kiosks.discard("manual")  # hand-entered IN/OUT rows, not a camera
     for kiosk_id in sorted(set(heartbeats) | event_kiosks | set(enrolled)):
@@ -94,5 +96,6 @@ async def camera_overview(db: AsyncSession) -> list[dict[str, Any]]:
             "cap": cap,
             "online": online,
             "liveness": liveness_state(hb.device_json if hb is not None else None),
+            "role": roles.get(kiosk_id, "both"),
         })
     return out
