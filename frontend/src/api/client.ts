@@ -43,6 +43,12 @@ import type {
   RosterRow,
   SiteOut,
   WatchlistEntry,
+  ChatAction,
+  ChatConfig,
+  ChatReply,
+  ChatStatus,
+  LeaveOut,
+  PolicyStatus,
 } from "./types";
 
 // Vite exposes build-time env vars via import.meta.env; falls back to the
@@ -512,5 +518,63 @@ export async function listCameras(): Promise<CameraOut[]> {
 
 export async function getAnalyticsOverview(params: { date_from: string; date_to: string }): Promise<AnalyticsOverview> {
   const { data } = await http.get<AnalyticsOverview>("/analytics/overview", { params });
+  return data;
+}
+
+// -- leaves ------------------------------------------------------------------------
+
+export async function listLeaves(employee_id: string): Promise<LeaveOut[]> {
+  const { data } = await http.get<LeaveOut[]>("/leaves", { params: { employee_id } });
+  return data;
+}
+
+export async function addLeave(payload: {
+  employee_id: string;
+  date_from: string;
+  date_to: string;
+  kind: "paid" | "unpaid";
+  note?: string | null;
+}): Promise<{ days: number }> {
+  const { data } = await http.post<{ days: number }>("/leaves", payload);
+  return data;
+}
+
+export async function deleteLeave(id: string): Promise<void> {
+  await http.delete(`/leaves/${id}`);
+}
+
+// -- chatbot -----------------------------------------------------------------------
+
+export async function getChatStatus(): Promise<ChatStatus> {
+  const { data } = await http.get<ChatStatus>("/chat/status");
+  return data;
+}
+
+export async function sendChat(payload: {
+  message?: string;
+  history?: { role: "user" | "assistant"; content: string }[];
+  action?: ChatAction;
+}): Promise<ChatReply> {
+  const { data } = await http.post<ChatReply>("/chat", payload, { timeout: 90_000 });
+  return data;
+}
+
+export async function getChatConfig(): Promise<ChatConfig> {
+  const { data } = await http.get<ChatConfig>("/chat/config");
+  return data;
+}
+
+export async function saveChatConfig(payload: Partial<ChatConfig> & { api_key?: string }): Promise<ChatConfig> {
+  const { data } = await http.put<ChatConfig>("/chat/config", payload);
+  return data;
+}
+
+export async function reindexPolicy(): Promise<PolicyStatus> {
+  const { data } = await http.post<PolicyStatus>("/chat/reindex");
+  return data;
+}
+
+export async function testChatModel(): Promise<{ ok: boolean; reply?: string; error?: string }> {
+  const { data } = await http.post<{ ok: boolean; reply?: string; error?: string }>("/chat/test", {}, { timeout: 90_000 });
   return data;
 }

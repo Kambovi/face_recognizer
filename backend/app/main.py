@@ -12,7 +12,9 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.routers import (
     alerts,
+    chat,
     hq,
+    leaves,
     notify,
     analytics,
     attendance,
@@ -128,3 +130,5 @@ app.include_router(reports.router, prefix=API_PREFIX)
 app.include_router(alerts.router, prefix=API_PREFIX)
 app.include_router(hq.router, prefix=API_PREFIX)
 app.include_router(notify.router, prefix=API_PREFIX)
+app.include_router(chat.router, prefix=API_PREFIX)
+app.include_router(leaves.router, prefix=API_PREFIX)

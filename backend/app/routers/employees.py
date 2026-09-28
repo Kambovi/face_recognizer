@@ -73,6 +73,7 @@ async def create_employee(
         shift_id=payload.shift_id,
         home_kiosk_id=payload.home_kiosk_id or None,
         contractor=(payload.contractor or "").strip() or None,
+        monthly_salary=payload.monthly_salary,
     )
     db.add(employee)
     await db.flush()

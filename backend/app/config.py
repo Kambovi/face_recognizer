@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     model_cache_dir: str = "/models"
     insightface_model_name: str = "buffalo_l"
 
+    # --- Chatbot: folder of company policy documents (.txt .md .pdf .docx) ---
+    policy_dir: str = "./data/policy"
+
     # --- CORS ---
     cors_origins: str = "*"
 

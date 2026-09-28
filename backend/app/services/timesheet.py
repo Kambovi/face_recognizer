@@ -8,6 +8,7 @@ and a status code:
   P    present            HD   half day (below `full_day_min_hours`)
   A    absent             WO   weekly off
   WOP  worked on a weekly off (all worked time is overtime)
+  L    approved paid leave  LWP  leave without pay (models/leaves.py)
   -    not on the roster yet (joined later), or a future date -- not counted anywhere
 
 Rules (all tunable in Settings, see settings_service.DEFAULT_SETTINGS):
@@ -35,12 +36,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attendance_events import AttendanceEvent
 from app.models.employees import Employee
+from app.models.leaves import Leave
 from app.models.enums import SubjectType
 from app.models.shifts import Shift
 from app.services.settings_service import get_all_settings
 from app.services.shiftday import LOCAL_TZ, ShiftResolver, load_resolver, shift_bounds, shift_minutes
 
-STATUSES = ("P", "HD", "A", "WO", "WOP", "-")
+STATUSES = ("P", "HD", "A", "WO", "WOP", "L", "LWP", "-")
 
 
 @dataclass
@@ -133,10 +135,14 @@ def build_day(
     events: list[AttendanceEvent],
     shift: Shift | None,
     rules: Rules,
+    leave: str | None = None,
 ) -> DayRecord:
     off = day.weekday() in rules.weekly_off
     if not events:
-        return DayRecord(employee_id, day, "WO" if off else "A", shift=shift)
+        if off:
+            return DayRecord(employee_id, day, "WO", shift=shift)
+        status = {"paid": "L", "unpaid": "LWP"}.get(leave or "", "A")
+        return DayRecord(employee_id, day, status, shift=shift)
     ev = sorted(events, key=lambda e: e.occurred_at)
     first, last = ev[0].occurred_at, ev[-1].occurred_at
     worked = int((last - first).total_seconds() // 60)
@@ -231,6 +237,13 @@ async def build_timesheet(
                 continue
             by_day[(e.employee_id, resolver.attendance_date(e.employee_id, e.occurred_at))].append(e)
 
+    leaves: dict[tuple[str, date], str] = {}
+    if ids:
+        for lv in (await db.execute(
+            select(Leave).where(Leave.employee_id.in_(ids), Leave.day >= date_from, Leave.day <= date_to)
+        )).scalars().all():
+            leaves[(lv.employee_id, lv.day)] = lv.kind
+
     days = _daterange(date_from, date_to)
     today = datetime.now(LOCAL_TZ).date()
     records: dict[tuple[str, date], DayRecord] = {}
@@ -246,14 +259,15 @@ async def build_timesheet(
             if shift is None:
                 shift = (_nearest_shift(all_shifts, min(e.occurred_at for e in evs))
                          if evs and rules.auto_shift else None) or resolver.default
-            records[(p.id, d)] = build_day(p.id, d, evs, shift, rules)
+            records[(p.id, d)] = build_day(p.id, d, evs, shift, rules, leaves.get((p.id, d)))
     return Timesheet(people, days, records, rules)
 
 
 def person_totals(ts: Timesheet, employee_id: str) -> dict[str, float]:
     recs = ts.for_person(employee_id)
     count = {s: sum(1 for r in recs if r.status == s) for s in STATUSES}
-    working = sum(1 for r in recs if r.status in ("P", "HD", "A"))
+    # LWP is a working day that isn't paid; L is paid, like a weekly off
+    working = sum(1 for r in recs if r.status in ("P", "HD", "A", "LWP"))
     paid_working = sum(r.present_value for r in recs if r.status in ("P", "HD"))
     return {
         "days_in_range": len([r for r in recs if r.status != "-"]),
@@ -263,6 +277,8 @@ def person_totals(ts: Timesheet, employee_id: str) -> dict[str, float]:
         "absent": count["A"],
         "weekly_off": count["WO"],
         "worked_on_off": count["WOP"],
+        "leave": count["L"],
+        "unpaid_leave": count["LWP"],
         "late_days": sum(1 for r in recs if r.late_minutes > 0),
         "late_minutes": sum(r.late_minutes for r in recs),
         "early_leave_minutes": sum(r.early_leave_minutes for r in recs),

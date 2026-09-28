@@ -12,6 +12,8 @@ export interface PersonValues {
   home_kiosk_id: string;
   /** undefined = not editable here (field hidden, value left unchanged). */
   contractor?: string;
+  /** Monthly salary in ₹ as typed; undefined = field hidden (not admin / not this form). */
+  monthly_salary?: string;
 }
 
 export const EMPTY_PERSON: PersonValues = {
@@ -48,11 +50,18 @@ export function personPayload(v: PersonValues): {
   designation: string | null;
   home_kiosk_id: string | null;
   contractor?: string | null;
+  monthly_salary?: number | null;
 } {
   return {
     department: v.department.trim() || null,
     designation: v.designation.trim() || null,
     home_kiosk_id: v.home_kiosk_id || null,
     ...(v.contractor === undefined ? {} : { contractor: v.contractor.trim() || null }),
+    ...(v.monthly_salary === undefined ? {} : { monthly_salary: parseSalary(v.monthly_salary) }),
   };
+}
+
+function parseSalary(v: string): number | null {
+  const n = Number(v.replace(/[,₹\s]/g, ""));
+  return v.trim() && Number.isFinite(n) && n >= 0 ? n : null;
 }

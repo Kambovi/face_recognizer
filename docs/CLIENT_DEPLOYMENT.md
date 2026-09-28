@@ -45,15 +45,16 @@
 python scripts\import_people.py --template people.csv
 ```
 
-| emp_code | name | department | designation | shift | home_camera | contractor |
-|---|---|---|---|---|---|---|
-| EMP001 | Ravi Kumar | Production | Operator | General | main-gate | Sharma Manpower |
-| EMP002 | Anita Singh | Quality | Inspector | Night | main-gate | |
+| emp_code | name | department | designation | shift | home_camera | contractor | monthly_salary |
+|---|---|---|---|---|---|---|---|
+| EMP001 | Ravi Kumar | Production | Operator | General | main-gate | Sharma Manpower | 18000 |
+| EMP002 | Anita Singh | Quality | Inspector | Night | main-gate | | 22500 |
 
 - Sirf `emp_code` aur `name` zaroori hain.
 - `department` bilkul wahi likho jo department list me hai.
 - `shift` = shift ka naam, `home_camera` = camera ID. Ye dono Phase 3 aur 5 me banenge.
 - `contractor` khaali = company ka apna staff.
+- `monthly_salary` = gross monthly salary, sirf number (`18000`, `18,000` ya `₹18000` sab chalega). Khaali chhod sakte ho. Ye sirf admin ko dikhti hai (chatbot me payable salary ke liye).
 - Excel me File → Save As → **CSV UTF-8** karo (warna Hindi naam toot jaate hain).
 
 **Photo guideline.** Ye HR ko bhejo:
@@ -69,6 +70,7 @@ python scripts\import_people.py --template people.csv
 - [ ] Consent forms mile (count = employees count)
 - [ ] Vendor PIN tay kiya, password manager me save kiya
 - [ ] Payroll template mila
+- [ ] Company policy documents mile (leave, timing, salary, OT, notice period: PDF/Word). Ye HR chatbot ke liye hain
 
 ---
 
@@ -174,6 +176,8 @@ Phir dashboard me HR ke login se:
 - [ ] Rotating shift ho to **Roster** me pehle 2 hafte bhar do
 - [ ] **Settings → Payroll & overtime:** weekly off, OT minimum, rounding. Full/half-day ghante sirf tab jab exit camera bhi ho.
 - [ ] **Settings → WhatsApp:** numbers, templates/webhook, daily summary ka time. "Send test" dabao.
+- [ ] **HR chatbot:** client ki policy files server ke policy folder me copy karo (Windows: `C:\FaceAttendance\app\backend\data\policy\`, ya `.env` me `POLICY_DIR`). **Settings → HR chatbot** me files ki list aur "passages" count dikhna chahiye.
+- [ ] Chatbot ka AI model client se poochkar chuno: data bahar nahi jaana chahiye to **Ollama (local)**, warna **Claude/OpenAI** (API key client ke naam ki ho, bill unka). Kuch set na karo to Basic mode chalega. "Save & test model" dabao.
 
 ---
 
@@ -215,6 +219,8 @@ Admin email aur password maangega. Har person ke liye ye hota hai:
 | failed: "not a configured department" | CSV me spelling galat | CSV theek karo, dobara chalao (jo ban gaye wo skip ho jaate hain) |
 | failed: camera_full | us camera par 200 log ho gaye | doosra camera do, ya `setup_client.py update --camera-cap` |
 | already existed | ye ID pehle se hai | photos jodni hon to `--add-photos` |
+| already existed, salary updated | CSV me salary thi, update ho gayi | kuch nahi (salary badalne ka yahi tareeka hai) |
+| failed: monthly_salary 'x' is not a number | salary column me text | number likho, dobara chalao |
 
 Script dobara chalana safe hai; ek aadmi do baar nahi banta.
 
@@ -268,7 +274,7 @@ python scripts\reset_data.py attendance --before <go-live date>     # pilot ki a
 
 | Kisko | Kya sikhana |
 |---|---|
-| HR / admin | Dashboard; Edit drawer (Identify, Fix time, Wrong person, Watchlist); naya person add + photos; Reports (payroll, contractor, muster roll, monthly PDF); Shifts aur roster |
+| HR / admin | Dashboard; Edit drawer (Identify, Fix time, Wrong person, Watchlist); naya person add + photos; Reports (payroll, contractor, muster roll, monthly PDF); Shifts aur roster; **Leave marking** (Staff → Manage → Leave); **Ask HR chatbot** (naam likho → confirm → report; policy ke sawaal) |
 | Security | Bell alerts; Emergency muster aur roll call; spoof alert ka matlab |
 | Owner | Phone par dashboard; WhatsApp summary; Analytics; Sites (agar multi-site) |
 

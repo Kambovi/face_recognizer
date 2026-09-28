@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getSettings, updateSettings, toApiError } from "../api/client";
 import { NotificationSettings } from "../components/NotificationSettings";
+import { ChatbotSettings } from "../components/ChatbotSettings";
 
 type FieldKind = "number" | "boolean" | "string" | "weekdays";
 
@@ -170,6 +171,8 @@ export function Settings(): JSX.Element {
       {savedAt && !error && <p className="rounded-md bg-green-50 p-3 text-sm text-green-700">Saved at {savedAt.toLocaleTimeString()}.</p>}
 
       <NotificationSettings />
+
+      <ChatbotSettings />
 
       {device && (
         <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">

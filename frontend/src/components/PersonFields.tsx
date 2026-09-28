@@ -75,6 +75,17 @@ export function PersonFields({ value, onChange, show = {}, currentCamera, camera
           </datalist>
         </Field>
       )}
+      {value.monthly_salary !== undefined && (
+        <Field label="Monthly salary (₹)" hint="Gross; used for payable salary" wide>
+          <input
+            className={input}
+            inputMode="decimal"
+            value={value.monthly_salary}
+            placeholder="e.g. 18000"
+            onChange={(e) => set({ monthly_salary: e.target.value })}
+          />
+        </Field>
+      )}
       <Field label="Home camera" hint={`Max ${profile.max_enrolled_per_camera} per camera`} wide>
         <select className={input} value={value.home_kiosk_id} onChange={(e) => set({ home_kiosk_id: e.target.value })}>
           <option value="">— Not assigned —</option>

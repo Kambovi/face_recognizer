@@ -45,6 +45,7 @@ export interface EmployeeOut {
   home_kiosk_id: string | null;
   contractor: string | null;
   watchlist_reason: string | null;
+  monthly_salary: number | null;
   is_active: boolean;
   created_at: string;
   template_count: number;
@@ -65,6 +66,7 @@ export interface EmployeeCreate {
   shift_id?: string | null;
   home_kiosk_id?: string | null;
   contractor?: string | null;
+  monthly_salary?: number | null;
 }
 
 export interface EmployeeUpdate {
@@ -75,6 +77,7 @@ export interface EmployeeUpdate {
   home_kiosk_id?: string | null;
   contractor?: string | null;
   watchlist_reason?: string | null;
+  monthly_salary?: number | null;
   is_active?: boolean;
 }
 
@@ -511,7 +514,7 @@ export interface RosterAssign {
 
 // -- reports ------------------------------------------------------------------
 
-export type DayStatus = "P" | "HD" | "A" | "WO" | "WOP" | "-";
+export type DayStatus = "P" | "HD" | "A" | "WO" | "WOP" | "L" | "LWP" | "-";
 
 export interface PersonTotals {
   days_in_range: number;
@@ -679,4 +682,101 @@ export interface NotifyConfig {
   last_monthly: string | null;
   last_error: string | null;
   access_token_set: boolean;
+}
+
+// -- leaves / chatbot -------------------------------------------------------------
+
+export interface LeaveOut {
+  id: string;
+  employee_id: string;
+  day: string;
+  kind: "paid" | "unpaid";
+  note: string | null;
+}
+
+export type ChatTargetKind = "employee" | "department" | "camera" | "contractor";
+
+export interface ChatChoice {
+  type: "report" | "filter";
+  kind: ChatTargetKind;
+  id?: string;
+  query?: string;
+  department?: string;
+  label: string;
+  sub: string;
+  month: string;
+}
+
+export interface ChatColumn {
+  key: string;
+  label: string;
+  money?: boolean;
+}
+
+export type ChatRow = Record<string, string | number | null>;
+
+export interface ChatReport {
+  kind: ChatTargetKind;
+  target: string;
+  title: string;
+  month: string;
+  month_label: string;
+  columns: ChatColumn[];
+  rows: ChatRow[];
+  totals: ChatRow | null;
+  details: { columns: ChatColumn[]; rows: ChatRow[] } | null;
+  summary: string;
+  salary_hidden: boolean;
+}
+
+export interface ChatSource {
+  source: string;
+  passage: number;
+  snippet: string;
+}
+
+export interface ChatReply {
+  text: string;
+  choices: ChatChoice[];
+  report: ChatReport | null;
+  sources: ChatSource[];
+  mode: "llm" | "basic";
+  notice: string | null;
+}
+
+export interface ChatAction {
+  type: "report" | "filter";
+  kind: ChatTargetKind;
+  id?: string;
+  query?: string;
+  department?: string;
+  month?: string;
+}
+
+export interface ChatStatus {
+  enabled: boolean;
+  mode: "llm" | "basic";
+  provider: string;
+  model: string;
+  can_see_salary: boolean;
+  policy: { files: string[]; chunks: number };
+}
+
+export interface PolicyStatus {
+  folder: string;
+  exists: boolean;
+  files: string[];
+  chunks: number;
+  errors: Record<string, string>;
+}
+
+export interface ChatConfig {
+  enabled: boolean;
+  provider: "off" | "anthropic" | "openai" | "ollama";
+  model: string;
+  base_url: string;
+  temperature: number;
+  org_note: string;
+  api_key_set: boolean;
+  policy: PolicyStatus;
 }

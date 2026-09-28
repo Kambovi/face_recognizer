@@ -161,6 +161,20 @@ Mahina chuno, phir format chuno:
 
 <img src="images/mobile_dashboard.png" alt="Mobile dashboard" width="300">
 
+### 2.9 HR chatbot ("Ask HR") + leave + salary
+
+- Har page par "Ask HR" button hai. Ye do kaam karta hai:
+  1. **Company policy ke sawaal:** client ki PDF/Word policy files se jawab deta hai, source file ke naam ke saath.
+  2. **Kisi ki bhi attendance aur payroll:** naam, Emp ID, department, camera ya contractor likho → matches buttons me aate hain → **confirm** karo → table aati hai: Emp ID, present, half day, absent, leave, late, OT, paid days, salary, payable. Zyada log match hon to pehle department chunwata hai.
+- Numbers AI nahi banata: seedha attendance engine se aate hain. Cloud AI ko bhi salary kabhi nahi bheji jaati. Salary sirf admin ko dikhti hai.
+- AI ke bina bhi chalta hai (Basic mode). AI chahiye to Claude / OpenAI, ya local Ollama (tab kuch bhi bahar nahi jaata).
+- Naya: **monthly salary** field (Staff page + CSV import), **leave register** (paid / without pay). Leave wale din report me `L` / `LWP` dikhte hain, Absent nahi.
+- Details: `docs/PROJECT_BIBLE.md` chapter 17.
+
+![HR chatbot report](images/chatbot_report.png)
+
+<img src="images/chatbot_mobile.png" alt="Chatbot on phone" width="300">
+
 ---
 
 ## 3. Update kaise karein (aapke PC par)

@@ -8,6 +8,7 @@ from app.models.consents import Consent  # noqa: F401
 from app.models.employees import Employee  # noqa: F401
 from app.models.face_templates import FaceTemplate  # noqa: F401
 from app.models.kiosk_heartbeats import KioskHeartbeat  # noqa: F401
+from app.models.leaves import Leave  # noqa: F401
 from app.models.settings import Setting  # noqa: F401
 from app.models.shift_assignments import ShiftAssignment  # noqa: F401
 from app.models.sites import Site  # noqa: F401
@@ -23,6 +24,7 @@ __all__ = [
     "Employee",
     "FaceTemplate",
     "KioskHeartbeat",
+    "Leave",
     "Setting",
     "Shift",
     "ShiftAssignment",

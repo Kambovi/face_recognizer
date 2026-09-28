@@ -7,7 +7,7 @@ For a new client with 50-2000 people, instead of adding everyone by hand:
      CSV UTF-8). Start from the template:
          python scripts/import_people.py --template people.csv
      Columns (only emp_code and name are required):
-         emp_code, name, department, designation, shift, home_camera, contractor
+         emp_code, name, department, designation, shift, home_camera, contractor, monthly_salary
      `department` must be one of the departments set with setup_client.py,
      `shift` is a shift NAME (e.g. General, Night), `home_camera` a camera id.
 
@@ -34,23 +34,38 @@ from __future__ import annotations
 import argparse
 import csv
 import getpass
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-COLUMNS = ["emp_code", "name", "department", "designation", "shift", "home_camera", "contractor"]
+COLUMNS = ["emp_code", "name", "department", "designation", "shift", "home_camera", "contractor", "monthly_salary"]
 PHOTO_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 MAX_PHOTOS = 5
+
+
+def parse_salary(v: str | None) -> float | None:
+    """'18,000' / '₹18000' / '18000.50' -> 18000.0; blank -> None."""
+    t = re.sub(r"[,₹\s]|rs\.?|inr", "", (v or "").lower())
+    if not t:
+        return None
+    try:
+        n = float(t)
+    except ValueError:
+        raise ValueError(f"monthly_salary '{v}' is not a number") from None
+    if n < 0:
+        raise ValueError("monthly_salary can't be negative")
+    return n
 
 
 def write_template(path: Path) -> None:
     with path.open("w", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh)
         w.writerow(COLUMNS)
-        w.writerow(["EMP001", "Ravi Kumar", "Production", "Operator", "General", "main-gate", "Sharma Manpower"])
-        w.writerow(["EMP002", "Anita Singh", "Quality", "Inspector", "Night", "main-gate", ""])
+        w.writerow(["EMP001", "Ravi Kumar", "Production", "Operator", "General", "main-gate", "Sharma Manpower", "18000"])
+        w.writerow(["EMP002", "Anita Singh", "Quality", "Inspector", "Night", "main-gate", "", "22500"])
     print(f"Template written: {path}")
 
 
@@ -175,12 +190,18 @@ def main() -> None:
         code = r["emp_code"]
         res: dict[str, Any] = {"emp_code": code, "name": r["name"], "status": "", "photos_ok": 0, "photos_rejected": "", "error": ""}
         try:
+            salary = parse_salary(r.get("monthly_salary"))
             if code in existing:
                 emp_id = existing[code]
                 res["status"] = "already existed"
+                if salary is not None:  # re-running the CSV is how salaries get revised
+                    ur = api.c.patch(f"/employees/{emp_id}", json={"monthly_salary": salary})
+                    if ur.status_code != 200:
+                        raise ValueError("salary: " + err(ur))
+                    res["status"] = "already existed, salary updated"
                 if not args.add_photos:
                     results.append(res)
-                    print(f"[{i}/{len(rows)}] -- {code} {r['name']}: already existed (use --add-photos to add photos)")
+                    print(f"[{i}/{len(rows)}] -- {code} {r['name']}: {res['status']} (use --add-photos to add photos)")
                     continue
             else:
                 shift_id = None
@@ -193,6 +214,7 @@ def main() -> None:
                     "department": r.get("department") or None, "designation": r.get("designation") or None,
                     "shift_id": shift_id, "home_kiosk_id": r.get("home_camera") or None,
                     "contractor": r.get("contractor") or None,
+                    "monthly_salary": salary,
                 }
                 cr = api.c.post("/employees", json=body)
                 if cr.status_code != 201:

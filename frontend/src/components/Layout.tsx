@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { Building2, ChevronDown, GraduationCap, Hospital, LogOut, Menu, Siren, X, type LucideIcon } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { AlertBell } from "./alerts/AlertBell";
+import { ChatWidget } from "./chat/ChatWidget";
 import { useProfile } from "../profile/ProfileContext";
 import type { OrgType } from "../api/types";
 
@@ -127,6 +128,7 @@ export function Layout(): JSX.Element {
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
         <Outlet />
       </main>
+      <ChatWidget />
     </div>
   );
 }

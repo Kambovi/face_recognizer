@@ -23,6 +23,7 @@
 14. [Security, privacy aur DPDP](#14-security-privacy-aur-dpdp)
 15. [Known gaps aur roadmap](#15-known-gaps-aur-roadmap)
 16. [Command cheat-sheet](#16-command-cheat-sheet)
+17. [HR chatbot, leave aur salary](#17-hr-chatbot-leave-aur-salary)
 
 ---
 
@@ -343,6 +344,7 @@ Settings teen jagah rehti hain. Kaunsi setting kahan hai, ye yaad rakhna zaroori
 | `MEDIA_ROOT` | backend | `D:\data\media` |
 | `APP_TIMEZONE` | backend | `Asia/Kolkata` |
 | `CORS_ORIGINS` | backend | production me dashboard ka address |
+| `POLICY_DIR` | backend | chatbot ke policy documents ka folder, default `./data/policy` (backend folder ke andar) |
 | `KIOSK_ID` | kiosk | `main-gate` |
 | `CAMERA_SOURCE` | kiosk | `0`, `rtsp://...`, `synthetic` (test) |
 | `API_BASE_URL` | kiosk | `http://localhost:8000` |
@@ -387,7 +389,8 @@ python scripts\setup_client.py update --add-department "Class 2-A"        # PIN 
 
 | Table | Kya hai |
 |---|---|
-| `employees` | log (naam, ID, department, shift, home camera, contractor, watchlist) |
+| `employees` | log (naam, ID, department, shift, home camera, contractor, watchlist, monthly salary) |
+| `leaves` | approved chhutti: ek row = ek person ka ek din, paid ya unpaid |
 | `face_templates` | har person ke embeddings (encrypted copy ke saath) |
 | `consents` | photo ki anumati ka record (DPDP) |
 | `attendance_events` | har IN/OUT, rejects (liveness fail, too small) bhi |
@@ -395,7 +398,7 @@ python scripts\setup_client.py update --add-department "Class 2-A"        # PIN 
 | `shifts`, `shift_assignments` | shifts aur roster |
 | `alerts` | watchlist/spoof alerts |
 | `sites` | head-office par juri factories |
-| `settings` | runtime settings + client profile + WhatsApp config |
+| `settings` | runtime settings + client profile + WhatsApp config + chatbot config |
 | `users` | dashboard logins |
 | `audit_log` | kisne kya badla (sab edits) |
 | `kiosk_heartbeats` | camera zinda hai ya nahi |
@@ -816,3 +819,79 @@ docker compose exec api python scripts/manage_users.py list
 docker compose down            # data safe
 docker compose down -v         # DATA BHI MITAYEGA
 ```
+
+---
+
+## 17. HR chatbot, leave aur salary
+
+Dashboard ke har page par neeche-right **"Ask HR"** button hai. Phone par ye poori screen le leta hai.
+
+### 17.1 Ye kya karta hai
+
+| User poochta hai | Chatbot kya karta hai |
+|---|---|
+| "Sick leave ka rule kya hai?" | Policy folder me search karta hai, wahi se jawab deta hai, file ka naam (source) dikhata hai. Policy me nahi hai to seedha bol deta hai. |
+| "Rahul ki is mahine ki attendance aur salary" | Pehle matching log buttons me dikhata hai (naam · Emp ID · department). User click karke **confirm** karta hai, uske baad hi report aati hai. |
+| "Khan" (50 log match) | Pehle **department** chunwata hai, phir us department ke log dikhata hai. |
+| "Security department ka report" / "gate-2 camera" / contractor ka naam | Group ki report: har person ki ek row, sabse neeche total. |
+
+Report me har person ke liye: Emp ID, naam, dept, present, half day, absent, leave, late (din), OT ghante, paid days, aur **sirf admin ko** monthly salary aur payable. Report card me ◀ ▶ se mahina badlo, ⬇ se CSV download karo. Ek person ki report me "Day-wise detail" bhi hoti hai.
+
+### 17.2 Design ke 3 niyam (client ko pitch me bolo)
+
+1. **Numbers AI nahi banata.** AI model sirf ye samajhta hai ki user *kis* ke baare me pooch raha hai. Attendance aur salary ke numbers `services/timesheet.py` se aate hain, wahi jo payroll export me jaate hain. Isliye koi hallucinated figure nahi aa sakta.
+2. **Salary premises se bahar nahi jaati.** Cloud model (Claude/OpenAI) use karne par bhi model ko sirf naam, department aur policy ka text jaata hai. Salary aur attendance ke numbers kabhi nahi jaate.
+3. **Pehle confirm, phir data.** Galat "Rahul" ki salary kabhi nahi dikhegi. Har report audit log me likhi jaati hai (`chat_report`).
+
+### 17.3 Do mode
+
+| Mode | Kab | Kaisa |
+|---|---|---|
+| **Basic** | Settings me provider "None" (default) | Bina AI ke. Naam/ID pehchaanta hai, policy se keyword search karke best passage dikhata hai. Offline chalta hai. Demo aur chhote clients ke liye kaafi. |
+| **AI** | Claude / OpenAI / Ollama set kiya | Hindi, Hinglish aur English samajhta hai. "Pichle mahine", "august" jaise mahine khud nikaalta hai. Policy ka jawab apne shabdon me deta hai. Model down ho to apne aap Basic mode par aa jaata hai aur ek chhoti warning dikhata hai. |
+
+Setup: **Settings → HR chatbot** → provider → model name → API key → **Save & test model**.
+
+| Provider | Model (example) | Note |
+|---|---|---|
+| Claude (Anthropic) | `claude-sonnet-4-5` ya naya | Best quality. Model ka latest naam console.anthropic.com par check karo |
+| OpenAI | `gpt-4o-mini` | Sasta |
+| Ollama (local) | `qwen2.5:7b` ya `llama3.1:8b` | Kuch bhi bahar nahi jaata. Server par `ollama pull qwen2.5:7b` chalao, ~8 GB RAM chahiye. Model tool-calling support karne wala hona chahiye |
+
+### 17.4 Policy documents (RAG)
+
+- Client ki policy files (`.pdf`, `.docx`, `.txt`, `.md`) `POLICY_DIR` folder me copy karo. Default path `backend\data\policy\` hai.
+- Nayi, badli ya hatayi gayi file agle sawaal par apne aap padh li jaati hai. Settings me **Re-read** button bhi hai, aur wahan files ki list aur errors dikhte hain.
+- Search BM25 keyword ranking se hota hai: koi model download nahi, laptop par bhi chalta hai. AI mode me model Hinglish sawaal ko English keywords me badal kar search karta hai.
+- Scanned PDF (sirf photo, text nahi) nahi padhi jaati. Settings me error dikhega. Uska Word/text version maango.
+- Demo ke liye ek sample policy file hai: `docs/sample_policy/company_policy.md`. Isse `POLICY_DIR` me copy karo.
+
+### 17.5 Salary aur leave
+
+- **Salary:** Staff → Manage → "Monthly salary (₹)". Bulk ke liye `import_people.py` CSV me `monthly_salary` column bharo. Existing logon ke liye wahi CSV dobara chalao, salary update ho jaati hai (increment ke time kaam aata hai).
+- **Payable** = monthly salary ÷ mahine ke calendar din × paid days. Paid days me present, half day × ½, weekly off aur paid leave aate hain. Absent aur LWP kat-te hain. (`services/payroll.py`)
+- **Leave:** Staff → Manage → Leave → tareekh range → Paid / Without pay → Mark leave. Report me wo din `L` ya `LWP` dikhta hai, `A` nahi. Agar leave ke din banda aa gaya to `P` hi rahega. Weekly off `WO` hi rahega.
+- Payroll CSV aur muster roll me bhi Leave ka column aa gaya hai.
+
+### 17.6 Code map
+
+```
+backend/app/services/chatbot/
+  policy.py    folder -> passages -> BM25 search (auto re-index)
+  llm.py       Anthropic / OpenAI / Ollama, tool calling, ek hi interface
+  targets.py   naam / ID / dept / camera / contractor dhoondhna (typo bhi chalega)
+  report.py    confirmed target + mahine ki table (timesheet se)
+  engine.py    conversation loop, basic mode, system prompt
+backend/app/routers/chat.py    /chat, /chat/status, /chat/config, /chat/reindex, /chat/test
+backend/app/routers/leaves.py  /leaves (GET / POST / DELETE)
+backend/app/services/payroll.py  payable salary
+frontend/src/components/chat/ChatWidget.tsx   floating chat (responsive)
+frontend/src/components/ChatbotSettings.tsx   Settings panel
+frontend/src/components/LeavesSection.tsx     Staff panel me leave
+tests: backend/tests/test_chatbot.py (13 tests, LLM mocked)
+```
+
+### 17.7 Aage (roadmap)
+
+Poora automatic payroll: salary structure (Basic/HRA/allowances), PF, ESI, Professional Tax, payslip PDF, bank NEFT file, PF ECR, aur baad me TDS. Iski neev (paid days + payable) ban chuki hai.
+

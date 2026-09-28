@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { DataTable } from "../components/DataTable";
 import { AuthImage } from "../components/AuthImage";
 import { PersonFields } from "../components/PersonFields";
+import { LeavesSection } from "../components/LeavesSection";
 import { EMPTY_PERSON, personPayload, useCameras, type PersonValues } from "../components/person";
 import { useProfile } from "../profile/ProfileContext";
 import {
@@ -26,7 +27,7 @@ function CreateEmployeeForm({ shifts, onCreated }: { shifts: ShiftOut[]; onCreat
   const profile = useProfile();
   const cameras = useCameras();
   const [open, setOpen] = useState(false);
-  const [values, setValues] = useState<PersonValues>(EMPTY_PERSON);
+  const [values, setValues] = useState<PersonValues>({ ...EMPTY_PERSON, monthly_salary: "" });
   const [shiftId, setShiftId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -45,7 +46,7 @@ function CreateEmployeeForm({ shifts, onCreated }: { shifts: ShiftOut[]; onCreat
         ...personPayload(values),
         shift_id: shiftId || null,
       });
-      setValues(EMPTY_PERSON);
+      setValues({ ...EMPTY_PERSON, monthly_salary: "" });
       setShiftId("");
       setOpen(false);
       onCreated();
@@ -117,6 +118,7 @@ function EmployeeDetailPanel({
     designation: employee.designation ?? "",
     home_kiosk_id: employee.home_kiosk_id ?? "",
     contractor: employee.contractor ?? "",
+    monthly_salary: employee.monthly_salary == null ? "" : String(employee.monthly_salary),
   });
   const [shiftId, setShiftId] = useState(employee.shift_id ?? "");
   const [watchReason, setWatchReason] = useState(employee.watchlist_reason ?? "");
@@ -253,6 +255,8 @@ function EmployeeDetailPanel({
             </button>
           </div>
         </section>
+
+        <LeavesSection employeeId={employee.id} />
 
         <section className="mb-5">
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Consent</h3>

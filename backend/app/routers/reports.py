@@ -172,7 +172,8 @@ PAYROLL_HEADERS: dict[str, list[tuple[str, str]]] = {
 GENERIC_COLUMNS: list[tuple[str, str]] = [
     ("Emp ID", "emp_code"), ("Name", "name"), ("Department", "department"), ("Contractor", "contractor"),
     ("Days in month", "days_in_range"), ("Working days", "working_days"), ("Present", "present"),
-    ("Half days", "half_days"), ("Absent", "absent"), ("Weekly off", "weekly_off"),
+    ("Half days", "half_days"), ("Absent", "absent"), ("Leave", "leave"), ("Unpaid leave", "unpaid_leave"),
+    ("Weekly off", "weekly_off"),
     ("Worked on weekly off", "worked_on_off"), ("Paid days", "paid_days"), ("LOP days", "lop_days"),
     ("Late days", "late_days"), ("Late minutes", "late_minutes"), ("OT hours", "ot_hours"),
     ("Worked hours", "worked_hours"),
@@ -276,11 +277,11 @@ async def muster_roll(
     ts = await build_timesheet(db, date_from, date_to, contractor=None if contractor is None else
                                ("" if contractor == OWN_STAFF else contractor))
     header = ["Emp ID", "Name", "Department", "Contractor"] + [d.strftime("%d %b") for d in ts.days] + [
-        "Present", "Half days", "Absent", "Weekly off", "Paid days", "OT hours"]
+        "Present", "Half days", "Absent", "Leave", "Weekly off", "Paid days", "OT hours"]
     rows: list[list[Any]] = [header]
     for p in ts.people:
         t = person_totals(ts, p.id)
         codes = [ts.records[(p.id, d)].status for d in ts.days]
         rows.append([p.emp_code, p.name, p.department or "", p.contractor or OWN_STAFF, *codes,
-                     t["present"], t["half_days"], t["absent"], t["weekly_off"], t["paid_days"], t["ot_hours"]])
+                     t["present"], t["half_days"], t["absent"], t["leave"] + t["unpaid_leave"], t["weekly_off"], t["paid_days"], t["ot_hours"]])
     return _csv(rows, f"muster_roll_{date_from}_{date_to}.csv")
