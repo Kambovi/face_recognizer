@@ -61,3 +61,14 @@ def test_face_cut_off_by_frame_edge_is_rejected() -> None:
 
 def test_gate_can_be_switched_off_from_settings() -> None:
     assert assess(_frame(level=20), BOX, _kps(nose_dy=40), 0.1, QualityConfig(enabled=False)).ok
+
+
+def test_partly_covered_face_is_rejected_by_the_combined_score() -> None:
+    """2026-09-29: a hand over the face passed every individual check but
+    scored ~0.35-0.4 (clear face ~0.73) and became an 'unknown' person."""
+    # passes det-score (>0.6), frontality and pitch, but everything is mediocre
+    kps = _kps(nose_dx=24, nose_dy=12)
+    r = assess(_frame(), BOX, kps, 0.62, QualityConfig())
+    assert not r.ok and r.reason == "low_quality_score" and r.score < 0.5
+    assert assess(_frame(), BOX, kps, 0.62, QualityConfig(min_score=0.0)).ok  # limit is a setting
+    assert assess(_frame(), BOX, _kps(), 0.9, QualityConfig()).ok  # clear face still passes

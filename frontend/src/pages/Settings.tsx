@@ -31,6 +31,16 @@ const FIELD_GROUPS: { title: string; fields: FieldSpec[] }[] = [
     ],
   },
   {
+    title: "Face quality (kiosk skips bad frames)",
+    fields: [
+      { key: "quality_gate_enabled", label: "Quality gate enabled", kind: "boolean" },
+      { key: "quality_min_score", label: "Minimum quality score (0-1)", kind: "number", step: 0.05, hint: "Hand over the face ~0.35-0.4, clear face ~0.7+. Raise if covered faces still become unknowns." },
+      { key: "quality_min_det_score", label: "Minimum detector confidence", kind: "number", step: 0.05 },
+      { key: "quality_min_brightness", label: "Minimum brightness (0-255)", kind: "number", step: 1 },
+      { key: "quality_min_sharpness", label: "Minimum sharpness", kind: "number", step: 1 },
+    ],
+  },
+  {
     title: "Liveness",
     fields: [
       { key: "liveness_enabled", label: "Liveness check enabled", kind: "boolean" },

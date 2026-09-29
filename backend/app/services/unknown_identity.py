@@ -110,6 +110,7 @@ async def cluster_or_create_unknown(
     kiosk_id: str | None = None,
     recent_window_seconds: float = 0.0,
     recent_threshold: float = 1.0,
+    min_template_quality: float = 0.0,
 ) -> ClusterResult:
     matches = await matching.search_templates(db, OwnerType.UNKNOWN, embedding, limit=5)
     best = matches[0] if matches else None
@@ -138,7 +139,9 @@ async def cluster_or_create_unknown(
             unknown.best_crop_path = crop_path
 
         is_new_angle = all(_cos(embedding, t.embedding) < NEAR_DUPLICATE_TEMPLATE_SIMILARITY for t in existing_templates)
-        if len(existing_templates) < unknown_max_templates and is_new_angle:
+        # never learn from a low-quality frame: a cluster that absorbs
+        # hand-over-face templates starts matching every covered face
+        if len(existing_templates) < unknown_max_templates and is_new_angle and quality_score >= min_template_quality:
             db.add(
                 FaceTemplate(
                     owner_type=OwnerType.UNKNOWN,
@@ -224,6 +227,7 @@ async def link_unknown_to_employee(
     reason: str,
     adopt_templates: bool,
     actor: str,
+    min_template_quality: float = 0.5,
 ) -> None:
     unknown_events_result = await db.execute(
         select(AttendanceEvent).where(AttendanceEvent.unknown_identity_id == unknown.id)
@@ -257,6 +261,9 @@ async def link_unknown_to_employee(
             )
         )
         unknown_templates = sorted(templates_result.scalars().all(), key=lambda t: t.quality_score, reverse=True)
+        # a bad unknown template (hand over face, blur) would make this person
+        # match other people's bad frames: only good ones are adopted
+        unknown_templates = [t for t in unknown_templates if t.quality_score >= min_template_quality]
 
         count_result = await db.execute(
             select(func.count()).select_from(FaceTemplate).where(
@@ -287,6 +294,7 @@ async def promote_unknown_to_employee(
     shift_id: str | None,
     actor: str,
     home_kiosk_id: str | None = None,
+    min_template_quality: float = 0.5,
     contractor: str | None = None,
 ) -> Employee:
     from app.services.ids import next_employee_face_id
@@ -311,9 +319,14 @@ async def promote_unknown_to_employee(
             FaceTemplate.owner_type == OwnerType.UNKNOWN, FaceTemplate.owner_id == unknown.id
         )
     )
-    for template in templates_result.scalars().all():
-        template.owner_type = OwnerType.EMPLOYEE
-        template.owner_id = employee.id
+    templates = sorted(templates_result.scalars().all(), key=lambda t: t.quality_score, reverse=True)
+    good = [t for t in templates if t.quality_score >= min_template_quality] or templates[:1]
+    for template in templates:
+        if template in good:
+            template.owner_type = OwnerType.EMPLOYEE
+            template.owner_id = employee.id
+        else:  # low-quality frame: don't let the new person match other bad frames
+            await db.delete(template)
 
     events_result = await db.execute(
         select(AttendanceEvent).where(AttendanceEvent.unknown_identity_id == unknown.id)

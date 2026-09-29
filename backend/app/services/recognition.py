@@ -125,6 +125,7 @@ async def process_kiosk_event(
         kiosk_id=payload.kiosk_id,
         recent_window_seconds=float(config.get("unknown_recent_window_seconds", 120)),
         recent_threshold=float(config.get("unknown_recent_threshold", 0.30)),
+        min_template_quality=float(config.get("quality_min_score", 0.5)),
     )
     data = RecognitionEventInput(
         subject_type=SubjectType.UNKNOWN,

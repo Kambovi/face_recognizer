@@ -97,6 +97,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "quality_max_pitch_ratio": 0.75,
     "quality_min_brightness": 40.0,
     "quality_min_sharpness": 20.0,
+    # combined quality score (0-1): below this the kiosk drops the frame, and
+    # the server never learns a face template from it (hand over the face
+    # ~0.35-0.4, clear face ~0.7+)
+    "quality_min_score": 0.50,
 }
 
 # Keys whose *default* depends on the resolved device profile (see spec's

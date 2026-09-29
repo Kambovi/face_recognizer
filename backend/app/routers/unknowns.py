@@ -25,6 +25,7 @@ from app.schemas.unknowns import (
 )
 from app.services.audit import write_audit
 from app.services.roster import validate_assignment
+from app.services.settings_service import DEFAULT_SETTINGS, get_setting
 from app.services.unknown_identity import link_unknown_to_employee, promote_unknown_to_employee, split_unknown
 
 router = APIRouter(prefix="/unknowns", tags=["unknowns"])
@@ -144,7 +145,9 @@ async def link_unknown(
     if employee is None:
         raise http_error(404, "employee_not_found", "Target employee not found")
 
-    await link_unknown_to_employee(db, unknown, employee, payload.reason, payload.adopt_templates, user.email)
+    min_q = float(await get_setting(db, "quality_min_score") or DEFAULT_SETTINGS["quality_min_score"])
+    await link_unknown_to_employee(db, unknown, employee, payload.reason, payload.adopt_templates, user.email,
+                                   min_template_quality=min_q)
     await write_audit(
         db, user.id, "link", "unknown_identity", unknown.id,
         after={"employee_id": employee.id, "adopt_templates": payload.adopt_templates, "reason": payload.reason},
@@ -170,6 +173,7 @@ async def promote_unknown(
         db, unknown, payload.name, payload.emp_code, payload.department, payload.designation, payload.shift_id, user.email,
         home_kiosk_id=payload.home_kiosk_id,
         contractor=payload.contractor,
+        min_template_quality=float(await get_setting(db, "quality_min_score") or DEFAULT_SETTINGS["quality_min_score"]),
     )
     db.add(
         Consent(
