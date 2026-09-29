@@ -90,12 +90,13 @@ const FIELD_GROUPS: { title: string; fields: FieldSpec[] }[] = [
   },
 ];
 
-const KNOWN_KEYS = new Set(FIELD_GROUPS.flatMap((g) => g.fields.map((f) => f.key)));
 
 export function Settings(): JSX.Element {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [device, setDevice] = useState<Record<string, unknown> | null>(null);
   const [rawJson, setRawJson] = useState("");
+  // untouched: the box mirrors the form. Edited: the box is what gets saved.
+  const [rawDirty, setRawDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,12 +107,14 @@ export function Settings(): JSX.Element {
       .then((res) => {
         setValues(res.settings);
         setDevice(res.device);
-        const extras = Object.fromEntries(Object.entries(res.settings).filter(([k]) => !KNOWN_KEYS.has(k)));
-        setRawJson(JSON.stringify(extras, null, 2));
       })
       .catch((err) => setError(toApiError(err).detail))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!rawDirty) setRawJson(JSON.stringify(values, null, 2));
+  }, [values, rawDirty]);
 
   function setField(key: string, kind: FieldKind, raw: string | boolean): void {
     let parsed: unknown = raw;
@@ -123,26 +126,23 @@ export function Settings(): JSX.Element {
     setSaving(true);
     setError(null);
     try {
-      let extras: Record<string, unknown> = {};
-      if (rawJson.trim()) {
+      let payloadValues: Record<string, unknown>;
+      if (rawDirty) {
         try {
-          extras = JSON.parse(rawJson) as Record<string, unknown>;
+          const parsed: unknown = JSON.parse(rawJson);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
+          payloadValues = parsed as Record<string, unknown>;
         } catch {
-          setError("Advanced JSON is not valid JSON.");
+          setError("Advanced JSON is not valid JSON (it must be one { ... } object).");
           setSaving(false);
           return;
         }
-      }
-      const payloadValues: Record<string, unknown> = { ...extras };
-      for (const group of FIELD_GROUPS) {
-        for (const field of group.fields) {
-          if (values[field.key] !== undefined && values[field.key] !== "") {
-            payloadValues[field.key] = values[field.key];
-          }
-        }
+      } else {
+        payloadValues = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ""));
       }
       const res = await updateSettings({ values: payloadValues });
       setValues(res.settings);
+      setRawDirty(false);
       setSavedAt(new Date());
     } catch (err) {
       setError(toApiError(err).detail);
@@ -253,16 +253,34 @@ export function Settings(): JSX.Element {
         </div>
       ))}
 
-      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Advanced (raw JSON)</h2>
-        <p className="mb-2 text-xs text-gray-500">Any setting key not covered above -- merged in verbatim on save.</p>
+      <details className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <summary className="cursor-pointer select-none text-sm font-semibold uppercase tracking-wide text-gray-500">
+          Advanced (raw JSON): all {Object.keys(values).length} settings
+        </summary>
+        <p className="mb-2 mt-2 text-xs text-gray-500">
+          Every current setting, including ones without a field above. It follows the form while you don&apos;t touch it.
+          If you edit it, <strong>this box is what gets saved</strong>. Unknown keys are ignored.
+          {rawDirty && (
+            <button
+              type="button"
+              onClick={() => setRawDirty(false)}
+              className="ml-2 text-brand-700 underline"
+            >
+              Discard JSON edits
+            </button>
+          )}
+        </p>
         <textarea
           value={rawJson}
-          onChange={(e) => setRawJson(e.target.value)}
-          rows={6}
+          onChange={(e) => {
+            setRawJson(e.target.value);
+            setRawDirty(true);
+          }}
+          rows={16}
+          spellCheck={false}
           className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-xs"
         />
-      </div>
+      </details>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import clsx from "clsx";
-import { DataTable } from "../components/DataTable";
+import { DataTable, type DataColumnMeta } from "../components/DataTable";
 import { AuthImage } from "../components/AuthImage";
 import { PersonFields } from "../components/PersonFields";
 import { LeavesSection } from "../components/LeavesSection";
@@ -312,6 +312,9 @@ function EmployeeDetailPanel({
   );
 }
 
+// dropdown filter with exact match, for columns with a handful of values
+const SELECT = { meta: { filter: "select" } as DataColumnMeta, filterFn: "equalsString" as const };
+
 export function Employees(): JSX.Element {
   const profile = useProfile();
   const [employees, setEmployees] = useState<EmployeeOut[]>([]);
@@ -326,7 +329,7 @@ export function Employees(): JSX.Element {
     setError(null);
     try {
       const [empRes, shiftRes] = await Promise.all([
-        listEmployees({ page_size: 500, is_active: showInactive ? undefined : true }),
+        listEmployees({ page_size: 5000, is_active: showInactive ? undefined : true }),
         listShifts(),
       ]);
       setEmployees(empRes.items);
@@ -354,16 +357,19 @@ export function Employees(): JSX.Element {
 
   const columns = useMemo<ColumnDef<EmployeeOut>[]>(
     () => [
-      { header: "Face ID", accessorKey: "face_id" },
-      { header: "Name", accessorKey: "name" },
-      { header: profile.id_label, accessorKey: "emp_code" },
-      { header: profile.department_label, accessorFn: (row) => row.department ?? "--" },
-      { header: profile.designation_label, accessorFn: (row) => row.designation ?? "--" },
-      { header: "Home camera", accessorFn: (row) => row.home_kiosk_id ?? "--" },
-      { header: "Contractor", accessorFn: (row) => row.contractor ?? "Own staff" },
-      { header: "Templates", accessorKey: "template_count" },
+      { id: "face_id", header: "Face ID", accessorKey: "face_id", sortingFn: "alphanumeric" },
+      { id: "name", header: "Name", accessorKey: "name" },
+      { id: "emp_code", header: profile.id_label, accessorKey: "emp_code", sortingFn: "alphanumeric" },
+      { id: "department", header: profile.department_label, accessorFn: (row) => row.department ?? "--", ...SELECT },
+      { id: "designation", header: profile.designation_label, accessorFn: (row) => row.designation ?? "--", ...SELECT },
+      { id: "home_camera", header: "Home camera", accessorFn: (row) => row.home_kiosk_id ?? "--", ...SELECT },
+      { id: "contractor", header: "Contractor", accessorFn: (row) => row.contractor ?? "Own staff", ...SELECT },
+      { id: "templates", header: "Photos", accessorKey: "template_count", ...SELECT },
       {
+        id: "status",
         header: "Status",
+        accessorFn: (row) => (row.is_active ? "Active" : "Inactive"),
+        ...SELECT,
         cell: ({ row }) => (
           <span className={row.original.is_active ? "text-green-700" : "text-gray-400"}>
             {row.original.is_active ? "Active" : "Inactive"}
@@ -371,6 +377,7 @@ export function Employees(): JSX.Element {
         ),
       },
       {
+        id: "actions",
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex gap-1.5">
@@ -407,7 +414,15 @@ export function Employees(): JSX.Element {
       {loading ? (
         <p className="text-sm text-gray-500">Loading employees...</p>
       ) : (
-        <DataTable data={employees} columns={columns} getRowId={(row) => row.id} emptyMessage={`No ${profile.person_label_plural.toLowerCase()} yet -- add one above.`} maxBodyHeight={560} />
+        <DataTable
+          data={employees}
+          columns={columns}
+          getRowId={(row) => row.id}
+          emptyMessage={`No ${profile.person_label_plural.toLowerCase()} yet -- add one above.`}
+          maxBodyHeight={560}
+          filterable
+          initialSort={[{ id: "emp_code", desc: false }]}
+        />
       )}
 
       {selected && (

@@ -379,12 +379,13 @@ export function Unknowns(): JSX.Element {
           />
         ),
       },
-      { header: "Face ID", accessorKey: "face_id" },
-      { header: "Label", accessorFn: (row) => row.label ?? "(unlabeled)" },
-      { header: "First seen", accessorFn: (row) => formatDateTime(row.first_seen_at) },
-      { header: "Last seen", accessorFn: (row) => formatDateTime(row.last_seen_at) },
-      { header: "Sightings", accessorKey: "sighting_count" },
-      { header: "Status", accessorKey: "status" },
+      { id: "face_id", header: "Face ID", accessorKey: "face_id", sortingFn: "alphanumeric" },
+      { id: "label", header: "Label", accessorFn: (row) => row.label ?? "(unlabeled)" },
+      // sort on the raw ISO timestamp, show it formatted
+      { id: "first_seen", header: "First seen", accessorFn: (row) => row.first_seen_at, cell: ({ row }) => formatDateTime(row.original.first_seen_at) },
+      { id: "last_seen", header: "Last seen", accessorFn: (row) => row.last_seen_at, cell: ({ row }) => formatDateTime(row.original.last_seen_at) },
+      { id: "sightings", header: "Sightings", accessorKey: "sighting_count" },
+      { id: "status", header: "Status", accessorKey: "status" },
       {
         header: "Actions",
         cell: ({ row }) => {
@@ -436,7 +437,14 @@ export function Unknowns(): JSX.Element {
       {loading ? (
         <p className="text-sm text-gray-500">Loading...</p>
       ) : (
-        <DataTable data={items} columns={columns} getRowId={(row) => row.id} emptyMessage="No unknown identities match this filter." maxBodyHeight={560} />
+        <DataTable
+          data={items}
+          columns={columns}
+          getRowId={(row) => row.id}
+          emptyMessage="No unknown identities match this filter."
+          maxBodyHeight={560}
+          initialSort={[{ id: "last_seen", desc: true }]}
+        />
       )}
 
       {linking && <LinkModal unknown={linking} onClose={() => setLinking(null)} onDone={load} />}
