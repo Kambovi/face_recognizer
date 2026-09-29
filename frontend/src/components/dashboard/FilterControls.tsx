@@ -188,7 +188,11 @@ export function DateRangePicker({ value, onChange, today }: DateRangePickerProps
               type="button"
               role="tab"
               aria-selected={value.mode === m.id}
-              onClick={() => onChange(buildRange(m.id, value.from, m.id === "custom" ? value.to : undefined))}
+              onClick={() =>
+                // Day / Month / Year tabs always open on the current period (today, this
+                // month, this year); pick an older one with the input next to them.
+                onChange(m.id === "custom" ? buildRange("custom", value.from, value.to) : buildRange(m.id, today))
+              }
               className={clsx(
                 "rounded-md px-3 py-1.5 text-xs font-medium transition",
                 value.mode === m.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700",

@@ -75,6 +75,20 @@ export function Dashboard(): JSX.Element {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  // A dashboard left open overnight follows the calendar: if it was showing
+  // the current day / month / year, move it to the new one after midnight.
+  const shownToday = useRef(today);
+  useEffect(() => {
+    const prev = shownToday.current;
+    if (prev === today) return;
+    shownToday.current = today;
+    setFilters((f) => {
+      const r = f.dateRange;
+      const wasCurrent = r.mode !== "custom" && r.from <= prev && prev <= r.to;
+      return wasCurrent ? { ...f, dateRange: buildRange(r.mode, today) } : f;
+    });
+  }, [today]);
+
   // --- data loading --------------------------------------------------------
   const { date_from, date_to } = clampToToday(filters.dateRange, today);
   const rangeIncludesToday = date_from <= today && today <= filters.dateRange.to;
