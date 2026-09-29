@@ -41,3 +41,10 @@ async def test_site_side_push_through_the_link(client, admin_headers, db_session
     # the token never shows up among the ordinary settings
     settings = (await client.get("/api/v1/settings", headers=admin_headers)).json()["settings"]
     assert not any("hq" in k for k in settings)
+
+
+async def test_hq_link_rejects_a_non_url(client, admin_headers):
+    r = await client.put("/api/v1/hq/link", json={"url": "someone@gmail.com", "token": "t"}, headers=admin_headers)
+    assert r.status_code == 422
+    r = await client.put("/api/v1/hq/link", json={"url": "", "token": ""}, headers=admin_headers)
+    assert r.status_code == 200

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,7 +87,7 @@ async def list_employees(
     department: str | None = None,
     is_active: bool | None = None,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = Query(50, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(require_admin),
 ) -> EmployeeListResponse:
@@ -103,10 +103,20 @@ async def list_employees(
     stmt = stmt.order_by(Employee.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     employees = list((await db.execute(stmt)).scalars().all())
 
+    # one grouped query instead of one per person (1000-person clients)
+    counts: dict[str, int] = {}
+    ids = [e.id for e in employees]
+    for i in range(0, len(ids), 500):
+        rows = await db.execute(
+            select(FaceTemplate.owner_id, func.count()).where(
+                FaceTemplate.owner_type == OwnerType.EMPLOYEE, FaceTemplate.owner_id.in_(ids[i : i + 500])
+            ).group_by(FaceTemplate.owner_id)
+        )
+        counts.update({k: int(n) for k, n in rows.all()})
     items = []
     for emp in employees:
         out = EmployeeOut.model_validate(emp)
-        out.template_count = await _template_count(db, emp.id)
+        out.template_count = counts.get(emp.id, 0)
         items.append(out)
 
     return EmployeeListResponse(items=items, total=total, page=page, page_size=page_size)

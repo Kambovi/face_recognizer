@@ -13,11 +13,13 @@ Site side (this install reports to an HQ):
 """
 from __future__ import annotations
 
+import re
+
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +43,14 @@ class SiteCreate(BaseModel):
 
 class LinkIn(BaseModel):
     url: str = Field(default="", max_length=300)
+
+    @field_validator("url")
+    @classmethod
+    def _http_url(cls, v: str) -> str:
+        v = v.strip()
+        if v and not re.match(r"^https?://[^\s/@]+", v):
+            raise ValueError("Head-office address must start with http:// or https:// (e.g. https://hq.example.in)")
+        return v
     token: str = Field(default="", max_length=200)
 
 
