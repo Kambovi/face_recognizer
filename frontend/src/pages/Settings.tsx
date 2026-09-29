@@ -35,6 +35,8 @@ const FIELD_GROUPS: { title: string; fields: FieldSpec[] }[] = [
     fields: [
       { key: "quality_gate_enabled", label: "Quality gate enabled", kind: "boolean" },
       { key: "quality_min_score", label: "Minimum quality score (0-1)", kind: "number", step: 0.05, hint: "Hand over the face ~0.35-0.4, clear face ~0.7+. Raise if covered faces still become unknowns." },
+      { key: "unknown_min_quality", label: "Unknown person only if quality at least", kind: "number", step: 0.05, hint: "Poorer unmatched faces are logged as 'unclear', never as a new unknown person." },
+      { key: "unknown_near_match_similarity", label: "Unknown person only if similarity to every employee below", kind: "number", step: 0.01, hint: "Close to someone but under the match threshold = probably that person with a covered face: logged as unclear." },
       { key: "quality_min_det_score", label: "Minimum detector confidence", kind: "number", step: 0.05 },
       { key: "quality_min_brightness", label: "Minimum brightness (0-255)", kind: "number", step: 1 },
       { key: "quality_min_sharpness", label: "Minimum sharpness", kind: "number", step: 1 },

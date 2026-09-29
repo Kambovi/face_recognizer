@@ -101,6 +101,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # the server never learns a face template from it (hand over the face
     # ~0.35-0.4, clear face ~0.7+)
     "quality_min_score": 0.50,
+    # An unmatched face becomes an "unknown person" only if it is clear
+    # (quality >= this) and not close to any employee (best similarity below
+    # unknown_near_match_similarity). Otherwise: logged as an unclear
+    # sighting only -- e.g. an employee leaving with a hand over the face.
+    "unknown_min_quality": 0.60,
+    "unknown_near_match_similarity": 0.30,
 }
 
 # Keys whose *default* depends on the resolved device profile (see spec's

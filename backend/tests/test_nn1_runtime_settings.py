@@ -65,7 +65,8 @@ async def test_recognition_uses_settings_table_value_not_a_hardcoded_constant(db
     query[1] = (1 - 0.5**2) ** 0.5
 
     config_strict = await get_all_settings(db_session)
-    config_strict = dict(config_strict, similarity_threshold=0.9)  # stricter than 0.5 similarity
+    # stricter than 0.5 similarity; near-match guard off so the miss becomes UNKNOWN
+    config_strict = dict(config_strict, similarity_threshold=0.9, unknown_near_match_similarity=1.1)
     payload = KioskEventRequest(
         client_event_id="11111111-1111-1111-1111-111111111111",
         kiosk_id="kiosk-1",

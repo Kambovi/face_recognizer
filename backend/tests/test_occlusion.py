@@ -67,3 +67,51 @@ async def test_promote_drops_bad_templates(db_session):
                                             min_template_quality=0.5)
     assert await _templates(db_session, OwnerType.EMPLOYEE, emp.id) == [0.73]
     assert await _templates(db_session, OwnerType.UNKNOWN, u.id) == []
+
+
+# ---- server-side guard: unclear / near-miss faces never become unknown people
+from app.models.sightings import Sighting  # noqa: E402
+from app.schemas.kiosk import KioskEventRequest  # noqa: E402
+from app.services.recognition import process_kiosk_event  # noqa: E402
+from app.services.settings_service import DEFAULT_SETTINGS  # noqa: E402
+
+_i = 0
+
+
+async def _post(db, embedding, quality):
+    global _i
+    _i += 1
+    return await process_kiosk_event(db, KioskEventRequest(
+        client_event_id=f"00000000-0000-0000-0000-{_i:012d}", kiosk_id="exit-gate", occurred_at=T,
+        embedding=embedding, quality_score=quality, liveness_score=0.95), dict(DEFAULT_SETTINGS))
+
+
+async def test_covered_face_of_an_employee_is_not_an_unknown(db_session):
+    emp = Employee(face_id="EMP-2", emp_code="E2", name="Bilal")
+    db_session.add(emp)
+    await db_session.flush()
+    e = vec(1)
+    db_session.add(FaceTemplate(owner_type=OwnerType.EMPLOYEE, owner_id=emp.id, embedding=e,
+                                embedding_encrypted=encrypt_embedding(e), quality_score=0.8, model_version="t"))
+    await db_session.flush()
+    v = np.zeros(512)
+    v[1], v[30] = 0.35, (1 - 0.35**2) ** 0.5  # cos = 0.35: below the 0.38 match, above the 0.30 near-match
+    out = await _post(db_session, v.tolist(), 0.8)
+    assert out.event is None
+    out = await _post(db_session, vec(200), 0.4)  # nobody's face, but a poor frame
+    assert out.event is None
+    assert (await db_session.execute(select(UnknownIdentity))).first() is None
+    rows = (await db_session.execute(select(Sighting))).scalars().all()
+    assert len(rows) == 2 and all(r.employee_id is None and r.unknown_identity_id is None for r in rows)
+    out = await _post(db_session, vec(300), 0.8)  # a clear stranger still becomes UNK
+    assert out.event is not None and out.event.unknown_identity_id is not None
+
+
+async def test_kiosk_endpoint_accepts_the_unclear_outcome(client, db_session):
+    from app.config import get_settings
+
+    r = await client.post("/api/v1/kiosk/event", headers={"Authorization": f"Bearer {get_settings().kiosk_service_token}"},
+                          json={"client_event_id": "00000000-0000-0000-0000-00000000abcd", "kiosk_id": "k",
+                                "occurred_at": T.isoformat(), "embedding": vec(5), "quality_score": 0.3,
+                                "liveness_score": 0.9})
+    assert r.status_code == 200 and r.json()["event_id"] is None

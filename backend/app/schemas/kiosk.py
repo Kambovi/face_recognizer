@@ -24,7 +24,7 @@ class KioskEventRequest(BaseModel):
 
 
 class KioskEventResponse(BaseModel):
-    event_id: str
+    event_id: str | None  # None = unclear face, not recorded as attendance
     subject_type: str | None
     face_id: str | None
     event_type: str | None
