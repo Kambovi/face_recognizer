@@ -36,22 +36,29 @@ async def on_event(
     *,
     employee: Employee | None = None,
     unknown: UnknownIdentity | None = None,
+    seen_at: datetime | None = None,
+    seen_kiosk: str | None = None,
 ) -> Alert | None:
+    """`seen_at` / `seen_kiosk` = this detection. The event row may be the
+    day's IN from hours ago (IN never moves), so cool-downs and the alert's
+    camera come from the detection, not the row."""
     alert: Alert | None = None
+    at = seen_at or event.occurred_at
+    kiosk = seen_kiosk or event.kiosk_id
     if employee is not None and employee.watchlist_reason:
-        since = event.occurred_at - timedelta(minutes=float(config.get("alert_cooldown_minutes", 30)))
+        since = at - timedelta(minutes=float(config.get("alert_cooldown_minutes", 30)))
         if not await _recent(db, since, kind="watchlist", employee_id=employee.id):
             alert = Alert(
-                kind="watchlist", kiosk_id=event.kiosk_id, employee_id=employee.id, event_id=event.id,
-                title=f"Watchlist: {employee.name} ({employee.emp_code}) at {event.kiosk_id}",
+                kind="watchlist", kiosk_id=kiosk, employee_id=employee.id, event_id=event.id,
+                title=f"Watchlist: {employee.name} ({employee.emp_code}) at {kiosk}",
                 detail=employee.watchlist_reason,
             )
     elif unknown is not None and unknown.watchlist_reason:
-        since = event.occurred_at - timedelta(minutes=float(config.get("alert_cooldown_minutes", 30)))
+        since = at - timedelta(minutes=float(config.get("alert_cooldown_minutes", 30)))
         if not await _recent(db, since, kind="watchlist", unknown_identity_id=unknown.id):
             alert = Alert(
-                kind="watchlist", kiosk_id=event.kiosk_id, unknown_identity_id=unknown.id, event_id=event.id,
-                title=f"Watchlist: {unknown.label or unknown.face_id} at {event.kiosk_id}",
+                kind="watchlist", kiosk_id=kiosk, unknown_identity_id=unknown.id, event_id=event.id,
+                title=f"Watchlist: {unknown.label or unknown.face_id} at {kiosk}",
                 detail=unknown.watchlist_reason,
             )
     elif (
@@ -70,7 +77,7 @@ async def on_event(
             )
     if alert is None:
         return None
-    alert.created_at = event.occurred_at
+    alert.created_at = at
     db.add(alert)
     await db.flush()
     logger.info("alert_raised", kind=alert.kind, kiosk_id=alert.kiosk_id)

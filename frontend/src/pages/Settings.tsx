@@ -41,7 +41,8 @@ const FIELD_GROUPS: { title: string; fields: FieldSpec[] }[] = [
   {
     title: "Dedupe & gating",
     fields: [
-      { key: "dedupe_window_minutes", label: "Dedupe window (minutes)", kind: "number", step: 1 },
+      { key: "dedupe_window_minutes", label: "Camera ignores the same face again for (minutes)", kind: "number", step: 1 },
+      { key: "min_out_gap_minutes", label: "Single gate camera: OUT only after this many minutes from IN (0 = every later sighting)", kind: "number", step: 5 },
       { key: "iou_same_subject", label: "IoU same-subject threshold", kind: "number", step: 0.01 },
       { key: "same_person_threshold", label: "Embedding same-person threshold", kind: "number", step: 0.01 },
       { key: "recent_embedding_buffer", label: "Recent embedding buffer size", kind: "number", step: 1 },

@@ -244,7 +244,8 @@ Script dobara chalana safe hai; ek aadmi do baar nahi banta.
 - [ ] Camera ka naam saaf ho (`main-gate`), `kiosk-01` jaisa nahi. Badalna ho to `manage_cameras.py rename`.
 - [ ] **Liveness calibration** har camera par (Bible 9.3): real + spoof + recommend → threshold Settings me daalo
 - [ ] "Anti-spoofing OFF" kahin nahi dikhta
-- [ ] **Muster page → Camera directions:** entry/exit mark kiye
+- [ ] **Muster page → Camera directions:** entry/exit mark kiye. Ek hi gate camera ho to "both" rehne do. Attendance ka IN/OUT isi se tay hota hai (Bible 17.6)
+- [ ] Ek gate camera wali site par client se poochho: IN ke kitne der baad ka detection "exit" maana jaye (default 2 ghante, Settings → "Single gate camera: OUT only after…")
 - [ ] 5–10 log guzre, sabka IN sahi naam ke saath aaya. Phone par photo dikhai to reject hua aur spoof alert aaya.
 - [ ] Head office wala client ho to Sites page par connect karke test kiya
 

@@ -37,17 +37,6 @@ function saveMsgs(m: Msg[]): void {
   }
 }
 
-function shiftMonth(month: string, by: number): string {
-  const [y = 2000, m = 1] = month.split("-").map(Number);
-  const d = new Date(y, m - 1 + by, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function currentMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 const inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 
 function cell(v: ChatRow[string] | undefined, col: ChatColumn): string {
@@ -126,16 +115,18 @@ export function ChatWidget(): JSX.Element | null {
 
   function choose(msgId: number, c: ChatChoice): void {
     setMsgs((m) => m.map((x) => (x.id === msgId ? { ...x, chosen: true } : x)));
-    const action: ChatAction =
-      c.type === "filter"
-        ? { type: "filter", kind: c.kind, query: c.query, department: c.department, month: c.month }
-        : { type: "report", kind: c.kind, id: c.id, month: c.month };
+    const action: ChatAction = {
+      type: c.type, kind: c.kind, id: c.id, query: c.query, department: c.department,
+      month: c.month, report: c.report, date: c.date, camera: c.camera,
+    };
     void ask("", action, c.type === "filter" ? `Department: ${c.label}` : `✓ ${c.label}`);
   }
 
   function changeMonth(r: ChatReport, by: number): void {
-    const month = shiftMonth(r.month, by);
-    void ask("", { type: "report", kind: r.kind, id: r.target, month }, `${r.title} · ${month}`);
+    const step = by < 0 ? r.nav.prev : r.nav.next;
+    if (!step) return;
+    const { label, ...action } = step;
+    void ask("", action as ChatAction, `${r.title} · ${action.date ?? action.month ?? label}`);
   }
 
   return (
@@ -373,7 +364,7 @@ function Table({ columns, rows, totals }: { columns: ChatColumn[]; rows: ChatRow
 }
 
 function ReportCard({ report, onMonth, busy }: { report: ChatReport; onMonth: (r: ChatReport, by: number) => void; busy: boolean }): JSX.Element {
-  const atLatest = report.month >= currentMonth();
+  const atLatest = !report.nav?.next;
   return (
     <div className="space-y-2 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -382,14 +373,14 @@ function ReportCard({ report, onMonth, busy }: { report: ChatReport; onMonth: (r
           <p className="text-xs text-gray-500">{report.month_label}</p>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => onMonth(report, -1)} disabled={busy} className="rounded-md border border-gray-200 p-1.5 hover:bg-gray-50" aria-label="Previous month">
+          <button onClick={() => onMonth(report, -1)} disabled={busy || !report.nav?.prev} className="rounded-md border border-gray-200 p-1.5 hover:bg-gray-50" aria-label={report.nav?.prev?.label ?? "Previous"}>
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             onClick={() => onMonth(report, 1)}
             disabled={busy || atLatest}
             className="rounded-md border border-gray-200 p-1.5 hover:bg-gray-50 disabled:opacity-40"
-            aria-label="Next month"
+            aria-label={report.nav?.next?.label ?? "Next"}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -411,9 +402,11 @@ function ReportCard({ report, onMonth, busy }: { report: ChatReport; onMonth: (r
           </div>
         </details>
       )}
-      <p className="text-[11px] text-gray-400">
-        Codes: P present · HD half day · A absent · L paid leave · LWP leave without pay · WO weekly off · WOP worked on weekly off
-      </p>
+      {report.report === "attendance" && (
+        <p className="text-[11px] text-gray-400">
+          Codes: P present · HD half day · A absent · L paid leave · LWP leave without pay · WO weekly off · WOP worked on weekly off
+        </p>
+      )}
     </div>
   );
 }

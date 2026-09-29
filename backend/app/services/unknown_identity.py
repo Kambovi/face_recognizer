@@ -245,6 +245,10 @@ async def link_unknown_to_employee(
 
     for orphan in orphans:
         await db.delete(orphan)
+    from app.services.sightings import repoint
+
+    await repoint(db, new_type=SubjectType.EMPLOYEE, employee_id=employee.id, unknown_identity_id=None,
+                  from_unknown_id=unknown.id)
 
     if adopt_templates:
         templates_result = await db.execute(
@@ -319,6 +323,10 @@ async def promote_unknown_to_employee(
         event.subject_type = SubjectType.EMPLOYEE
         event.employee_id = employee.id
         event.unknown_identity_id = None
+    from app.services.sightings import repoint
+
+    await repoint(db, new_type=SubjectType.EMPLOYEE, employee_id=employee.id, unknown_identity_id=None,
+                  from_unknown_id=unknown.id)
 
     unknown.status = UnknownStatus.RESOLVED
     unknown.resolved_employee_id = employee.id

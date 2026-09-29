@@ -51,6 +51,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.config import get_settings  # noqa: E402
 from app.db import AsyncSessionLocal, engine  # noqa: E402
 from app.models.attendance_events import AttendanceEvent  # noqa: E402
+from app.models.leaves import Leave  # noqa: E402
+from app.models.shift_assignments import ShiftAssignment  # noqa: E402
+from app.models.sightings import Sighting  # noqa: E402
 from app.models.audit_log import AuditLog  # noqa: E402
 from app.models.consents import Consent  # noqa: E402
 from app.models.employees import Employee  # noqa: E402
@@ -113,6 +116,7 @@ async def counts(db) -> dict[str, int]:
         "people (all)": await _count(db, Employee),
         "person face templates": await _count(db, FaceTemplate, FaceTemplate.owner_type == OwnerType.EMPLOYEE),
         "attendance events": await _count(db, AttendanceEvent),
+        "detections (sightings)": await _count(db, Sighting),
         "unknown faces": await _count(db, UnknownIdentity),
         "unknown face templates": await _count(db, FaceTemplate, FaceTemplate.owner_type == OwnerType.UNKNOWN),
         "audit log rows": await _count(db, AuditLog),
@@ -138,6 +142,7 @@ async def clear_attendance(db, before: date | None) -> set[str]:
         ev_where.append(AttendanceEvent.occurred_at < _local_midnight_utc(before))
 
     paths = await _paths(db, select(AttendanceEvent.crop_path).where(*ev_where))
+    await db.execute(delete(Sighting).where(*([Sighting.occurred_at < _local_midnight_utc(before)] if before else [])))
     await db.execute(delete(AttendanceEvent).where(*ev_where))
 
     # Unknown faces: all of them for a full clear; with --before only the ones
@@ -154,6 +159,7 @@ async def clear_attendance(db, before: date | None) -> set[str]:
         tpl = (FaceTemplate.owner_type == OwnerType.UNKNOWN) & FaceTemplate.owner_id.in_(chunk)
         paths |= await _paths(db, select(FaceTemplate.source_image_path).where(tpl))
         await db.execute(delete(FaceTemplate).where(tpl))
+        await db.execute(delete(Sighting).where(Sighting.unknown_identity_id.in_(chunk)))
         await db.execute(delete(UnknownIdentity).where(UnknownIdentity.id.in_(chunk)))
     return paths
 
@@ -179,6 +185,9 @@ async def clear_people(db, codes: list[str] | None, code_like: str | None) -> se
                 or_(AttendanceEvent.employee_id.in_(chunk), AttendanceEvent.original_employee_id.in_(chunk))
             )
         )
+        await db.execute(delete(Sighting).where(Sighting.employee_id.in_(chunk)))
+        await db.execute(delete(Leave).where(Leave.employee_id.in_(chunk)))
+        await db.execute(delete(ShiftAssignment).where(ShiftAssignment.employee_id.in_(chunk)))
         await db.execute(delete(Consent).where(Consent.employee_id.in_(chunk)))
         await db.execute(
             update(UnknownIdentity)

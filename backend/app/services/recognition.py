@@ -5,6 +5,8 @@ failing liveness result against to assert zero calls into
 `matching.search_templates` (i.e. zero "recognition calls")."""
 from __future__ import annotations
 
+from typing import Any
+
 from dataclasses import dataclass
 from datetime import timezone
 
@@ -18,6 +20,7 @@ from app.schemas.kiosk import KioskEventRequest
 from app.services import matching
 from app.services import alerts
 from app.services.shiftday import DEFAULT_NIGHT_TAIL_HOURS, load_resolver
+from app.services.muster import camera_roles
 from app.services.attendance import RecognitionEventInput, local_date, upsert_attendance_event
 from app.services.media import save_base64_jpeg
 from app.services.unknown_identity import cluster_or_create_unknown
@@ -53,6 +56,10 @@ async def process_kiosk_event(
         crop_path = save_base64_jpeg(payload.crop_jpeg_base64, subdir=f"events/{day}/{payload.kiosk_id}")
 
     dedupe_window = float(config.get("dedupe_window_minutes", 5))
+    rules: dict[str, Any] = {
+        "camera_role": (await camera_roles(db)).get(payload.kiosk_id, "both"),
+        "min_out_gap_minutes": float(config.get("min_out_gap_minutes", 120)),
+    }
 
     # Pre-identification reject: liveness failed, or the face was too small.
     # `payload.embedding` is None here BY CONTRACT -- the kiosk never runs
@@ -99,9 +106,9 @@ async def process_kiosk_event(
             db, [employee.id], float(config.get("night_shift_tail_hours", DEFAULT_NIGHT_TAIL_HOURS))
         )
         event, created = await upsert_attendance_event(
-            db, data, dedupe_window, day_of=lambda ts: resolver.attendance_date(employee.id, ts)
+            db, data, dedupe_window, day_of=lambda ts: resolver.attendance_date(employee.id, ts), **rules
         )
-        await alerts.on_event(db, event, config, employee=employee)
+        await alerts.on_event(db, event, config, employee=employee, seen_at=occurred_at, seen_kiosk=payload.kiosk_id)
         await db.commit()
         return RecognitionOutcome(event=event, created=created, face_id=employee.face_id)
 
@@ -131,7 +138,8 @@ async def process_kiosk_event(
         reject_reason=RejectReason.BELOW_THRESHOLD,
         client_event_id=payload.client_event_id,
     )
-    event, created = await upsert_attendance_event(db, data, dedupe_window)
-    await alerts.on_event(db, event, config, unknown=cluster_result.unknown)
+    event, created = await upsert_attendance_event(db, data, dedupe_window, **rules)
+    await alerts.on_event(db, event, config, unknown=cluster_result.unknown, seen_at=occurred_at,
+                          seen_kiosk=payload.kiosk_id)
     await db.commit()
     return RecognitionOutcome(event=event, created=created, face_id=cluster_result.unknown.face_id)

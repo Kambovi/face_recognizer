@@ -873,7 +873,24 @@ Setup: **Settings → HR chatbot** → provider → model name → API key → *
 - **Leave:** Staff → Manage → Leave → tareekh range → Paid / Without pay → Mark leave. Report me wo din `L` ya `LWP` dikhta hai, `A` nahi. Agar leave ke din banda aa gaya to `P` hi rahega. Weekly off `WO` hi rahega.
 - Payroll CSV aur muster roll me bhi Leave ka column aa gaya hai.
 
-### 17.6 Code map
+### 17.6 IN / OUT ke niyam aur "kitni baar dikha" (2026-09-29)
+
+Client ne dekha ki 08:10 ki entry 08:35 ho gayi (dedupe window ke andar dobara dikhne par IN khisak jaata tha). Ab niyam ye hain (`services/attendance.py`):
+
+| Camera ka role (Muster page) | Pehla detection | Baad ke detections |
+|---|---|---|
+| **both** (ek hi gate, default) | IN, fixed | IN ke `min_out_gap_minutes` (default 120) ke baad wale OUT ko update karte hain: aakhri detection = final exit. Usse pehle wale sirf gine jaate hain. |
+| **entry** | IN, fixed | sirf gine jaate hain, OUT nahi banta |
+| **exit** | IN (agar entry miss hui) | har detection OUT = latest exit |
+
+- IN kabhi aage nahi khiskta. Offline queue se purana (pehle ka) detection baad me aaye to IN usi pehle time par chala jaata hai.
+- Hours = OUT − IN. Settings me "Single gate camera: OUT only after…" = 0 karo to IN ke baad har detection seedha exit update karega.
+- **Har detection** `sightings` table me hamesha ke liye save hota hai: camera, time, similarity. Kiosk ek hi chehre ko `dedupe_window_minutes` (5 min) tak dobara nahi bhejta, isliye ek row lagbhag ek baar guzarna hai.
+- Chatbot: "Imran 28 sep ko office entry camera pr kitni baar detect hua" → confirm → table: camera, times seen, first, last. Mahina bhi chalega. Camera ka naam na do to saare cameras dikhte hain.
+- Unknown ko Identify/Link/Promote karne par ya event reassign karne par uske sightings bhi sahi person par chale jaate hain.
+- Migration 0007 purane har IN/OUT row se ek sighting bana deti hai. Pehle ke merge hue detections wapas nahi aa sakte.
+
+### 17.7 Code map
 
 ```
 backend/app/services/chatbot/
@@ -885,13 +902,15 @@ backend/app/services/chatbot/
 backend/app/routers/chat.py    /chat, /chat/status, /chat/config, /chat/reindex, /chat/test
 backend/app/routers/leaves.py  /leaves (GET / POST / DELETE)
 backend/app/services/payroll.py  payable salary
+backend/app/services/sightings.py  detection log helpers (counts, repoint)
+backend/app/models/sightings.py    har detection ki row
 frontend/src/components/chat/ChatWidget.tsx   floating chat (responsive)
 frontend/src/components/ChatbotSettings.tsx   Settings panel
 frontend/src/components/LeavesSection.tsx     Staff panel me leave
 tests: backend/tests/test_chatbot.py (13 tests, LLM mocked)
 ```
 
-### 17.7 Aage (roadmap)
+### 17.8 Aage (roadmap)
 
 Poora automatic payroll: salary structure (Basic/HRA/allowances), PF, ESI, Professional Tax, payslip PDF, bank NEFT file, PF ECR, aur baad me TDS. Iski neev (paid days + payable) ban chuki hai.
 

@@ -49,6 +49,68 @@ def parse_month(text: str | None, now: date | None = None) -> str:
     return now.strftime("%Y-%m")
 
 
+def parse_date(text: str | None, now: date | None = None) -> str | None:
+    """A single day in the text, or None: '2026-09-28', '28/09', '28 sep',
+    'sep 28', 'aaj' / 'today', 'kal' / 'yesterday'."""
+    now = now or today()
+    t = (text or "").lower()
+    m = re.search(r"\b(20\d\d)-(\d\d)-(\d\d)\b", t)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
+        except ValueError:
+            return None
+    if re.search(r"\b(aaj|today)\b", t):
+        return now.isoformat()
+    if re.search(r"\b(kal|yesterday)\b", t):  # 'kal' in a question about the past = yesterday
+        return (now - timedelta(days=1)).isoformat()
+    m = re.search(r"\b(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\b", t)
+    if m:
+        day, mon = int(m.group(1)), int(m.group(2))
+        year = int(m.group(3)) if m.group(3) else now.year
+        year += 2000 if year < 100 else 0
+    else:
+        m = re.search(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)\b", t) or re.search(r"\b([a-z]+)\s+(\d{1,2})\b", t)
+        if not m:
+            return None
+        a, b = m.group(1), m.group(2)
+        word, num = (b, a) if a.isdigit() else (a, b)
+        if word not in MONTHS:
+            return None
+        day, mon = int(num), MONTHS[word]
+        y = re.search(r"\b(20\d\d)\b", t)
+        year = int(y.group(1)) if y else now.year
+    try:
+        d = date(year, mon, day)
+    except ValueError:
+        return None
+    if d > now and not re.search(r"\b20\d\d\b", t):
+        d = d.replace(year=d.year - 1)
+    return d.isoformat()
+
+
+def shift_month(month: str, by: int) -> str:
+    y, m = (int(x) for x in month.split("-"))
+    m += by
+    y, m = y + (m - 1) // 12, (m - 1) % 12 + 1
+    return f"{y}-{m:02d}"
+
+
+def _nav(kind: str, target: str, report: str, month: str, day: str | None, camera: str | None = None) -> dict[str, Any]:
+    """Prev / next buttons on the report card, as ready-made actions."""
+    base: dict[str, Any] = {"type": "report", "kind": kind, "id": target, "report": report}
+    if camera:
+        base["camera"] = camera
+    if day:
+        d = date.fromisoformat(day)
+        nxt = d + timedelta(days=1)
+        return {"prev": {**base, "date": (d - timedelta(days=1)).isoformat(), "label": "Previous day"},
+                "next": {**base, "date": nxt.isoformat(), "label": "Next day"} if nxt <= today() else None}
+    nxt_m = shift_month(month, 1)
+    return {"prev": {**base, "month": shift_month(month, -1), "label": "Previous month"},
+            "next": {**base, "month": nxt_m, "label": "Next month"} if nxt_m <= today().strftime("%Y-%m") else None}
+
+
 def month_bounds(month: str) -> tuple[date, date]:
     y, m = (int(x) for x in month.split("-"))
     return date(y, m, 1), date(y, m, calendar.monthrange(y, m)[1])
@@ -152,6 +214,7 @@ async def build_report(db: AsyncSession, kind: str, target: str, month: str, inc
         "columns": columns, "rows": rows, "totals": totals if len(rows) > 1 else None,
         "details": details, "summary": summary_text(kind, title, month_label, rows, totals, include_salary),
         "salary_hidden": not include_salary,
+        "report": "attendance", "date": None, "nav": _nav(kind, target, "attendance", month, None),
     }
 
 
@@ -186,3 +249,49 @@ def summary_text(kind: str, title: str, month_label: str, rows: list[dict[str, A
     if include_salary and totals.get("payable") is not None:
         s += f" Total payable {_fmt_money(totals['payable'])}."
     return s
+
+
+async def build_detection_report(
+    db: AsyncSession, kind: str, target: str, month: str, day: str | None, camera: str | None = None,
+) -> dict[str, Any]:
+    """How many times each person was seen, per camera: for one day, or per
+    day across a month. From the sightings log (models/sightings.py)."""
+    from app.services.sightings import counts
+
+    start, end = (date.fromisoformat(day),) * 2 if day else month_bounds(month)
+    people, title = await _people_for(db, kind, target, start, end)
+    by_id = {p.id: p for p in people}
+    data = await counts(db, list(by_id), start, end, kiosk_id=camera)
+    rows = []
+    for c in data:
+        p = by_id[c["employee_id"]]
+        rows.append({"date": c["date"].strftime("%a %d %b"), "emp_code": p.emp_code, "name": p.name,
+                     "camera": c["kiosk_id"], "count": c["count"], "first": c["first"], "last": c["last"]})
+    single = kind == "employee"
+    cols = ([] if day else [{"key": "date", "label": "Date"}]) + \
+        ([] if single else [{"key": "emp_code", "label": "Emp ID"}, {"key": "name", "label": "Name"}]) + [
+        {"key": "camera", "label": "Camera"}, {"key": "count", "label": "Times seen"},
+        {"key": "first", "label": "First"}, {"key": "last", "label": "Last"}]
+    period = date.fromisoformat(day).strftime("%d %b %Y") if day else start.strftime("%B %Y")
+    where = f" at {camera}" if camera else ""
+    total = sum(r["count"] for r in rows)
+    if not rows:
+        summary = f"{title}: not seen{where} on {period}." if day else f"{title}: not seen{where} in {period}."
+    elif single:
+        per_cam: dict[str, int] = {}
+        for r in rows:
+            per_cam[r["camera"]] = per_cam.get(r["camera"], 0) + r["count"]
+        parts = ", ".join(f"{k} {v}x" for k, v in per_cam.items())
+        summary = (f"{title} was seen {total} time(s){where} on {period} ({parts}); "
+                   f"first {rows[0]['first']}, last {rows[-1]['last']}." if day else
+                   f"{title} was seen {total} time(s){where} in {period} on {len({r['date'] for r in rows})} day(s) ({parts}).")
+    else:
+        summary = f"{title}, {period}{where}: {len({r['emp_code'] for r in rows})} people seen, {total} detections in all."
+    return {
+        "kind": kind, "target": target, "title": f"{title} · detections", "month": month, "month_label": period,
+        "columns": cols, "rows": rows,
+        "totals": {"count": total, cols[0]["key"]: "Total"} if len(rows) > 1 else None,
+        "details": None, "summary": summary, "salary_hidden": False,
+        "report": "detections", "date": day, "camera": camera,
+        "nav": _nav(kind, target, "detections", month, day, camera),
+    }

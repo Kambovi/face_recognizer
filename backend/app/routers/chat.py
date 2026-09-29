@@ -42,6 +42,9 @@ class ChatAction(BaseModel):
     query: str | None = None
     department: str | None = None
     month: str | None = Field(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    report: Literal["attendance", "detections"] | None = None
+    date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    camera: str | None = Field(default=None, max_length=100)
 
 
 class ChatIn(BaseModel):
@@ -94,7 +97,9 @@ async def chat(payload: ChatIn, db: AsyncSession = Depends(get_db), user: User =
     rep = reply.get("report")
     if rep:
         await write_audit(db, user.id, "chat_report", rep["kind"], str(rep["target"])[:100], before=None,
-                          after={"month": rep["month"], "salary_shown": not rep["salary_hidden"], "rows": len(rep["rows"])})
+                          after={"report": rep.get("report"), "month": rep["month"], "date": rep.get("date"),
+                                 "salary_shown": rep.get("report") == "attendance" and not rep["salary_hidden"],
+                                 "rows": len(rep["rows"])})
         await db.commit()
     return reply
 

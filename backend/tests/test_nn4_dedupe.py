@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import datetime as dt
 
+from zoneinfo import ZoneInfo
+
 import numpy as np
 
 from app.models.attendance_events import AttendanceEvent
@@ -21,7 +23,9 @@ from app.schemas.kiosk import KioskEventRequest
 from app.security import encrypt_embedding
 from app.services.recognition import process_kiosk_event
 from app.services.settings_service import DEFAULT_SETTINGS
-from sqlalchemy import select
+from sqlalchemy import func, select
+
+from app.models.sightings import Sighting
 
 
 async def test_eight_seconds_of_repeated_frames_yields_exactly_one_event(db_session):
@@ -60,7 +64,10 @@ async def test_eight_seconds_of_repeated_frames_yields_exactly_one_event(db_sess
     assert events[0].event_type.value == "IN"
 
 
-async def test_detection_after_dedupe_window_creates_the_out_event(db_session):
+async def test_out_needs_min_gap_and_in_never_moves(db_session):
+    """2026-09-29 rule: one camera for in and out ("both"). A re-detection
+    25 min after IN is only counted; 2 h+ later it becomes OUT and keeps
+    moving to the latest detection. IN stays at the first detection."""
     emp = Employee(face_id="EMP-0002", emp_code="E2", name="Carol")
     db_session.add(emp)
     await db_session.flush()
@@ -75,25 +82,28 @@ async def test_detection_after_dedupe_window_creates_the_out_event(db_session):
     await db_session.flush()
 
     config = dict(DEFAULT_SETTINGS, similarity_threshold=0.3, dedupe_window_minutes=5)
-    start = dt.datetime.now(dt.timezone.utc)
+    start = dt.datetime(2026, 9, 28, 8, 10, tzinfo=ZoneInfo("Asia/Kolkata"))  # 08:10
 
     await process_kiosk_event(
         db_session,
         KioskEventRequest(client_event_id="in-1", kiosk_id="k1", occurred_at=start, embedding=embedding.tolist(), liveness_score=0.9),
         config,
     )
-    await process_kiosk_event(
-        db_session,
-        KioskEventRequest(
-            client_event_id="out-1", kiosk_id="k1",
-            occurred_at=start + dt.timedelta(minutes=10), embedding=embedding.tolist(), liveness_score=0.9,
-        ),
-        config,
-    )
+    async def seen(cid: str, minutes: int) -> None:
+        await process_kiosk_event(db_session, KioskEventRequest(
+            client_event_id=cid, kiosk_id="k1", occurred_at=start + dt.timedelta(minutes=minutes),
+            embedding=embedding.tolist(), liveness_score=0.9), config)
 
-    events = (
-        await db_session.execute(select(AttendanceEvent).where(AttendanceEvent.employee_id == emp.id))
-    ).scalars().all()
-    assert len(events) == 2
-    types = sorted(e.event_type.value for e in events)
-    assert types == ["IN", "OUT"]
+    async def rows() -> dict[str, dt.datetime]:
+        evs = (await db_session.execute(select(AttendanceEvent).where(AttendanceEvent.employee_id == emp.id))).scalars().all()
+        return {e.event_type.value: e.occurred_at for e in evs}
+
+    await seen("s-25", 25)
+    r = await rows()
+    assert list(r) == ["IN"] and r["IN"] == start  # 08:10 stays 08:10
+    await seen("s-130", 130)
+    await seen("s-500", 500)
+    r = await rows()
+    assert r["IN"] == start and r["OUT"] == start + dt.timedelta(minutes=500)
+    n = (await db_session.execute(select(func.count()).select_from(Sighting).where(Sighting.employee_id == emp.id))).scalar_one()
+    assert n == 4

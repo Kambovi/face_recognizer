@@ -24,6 +24,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # instead of silently accepting photos (see kiosk/kiosk/liveness.py).
     "liveness_required": True,
     "dedupe_window_minutes": 5,
+    # one-camera gate: a detection this long after IN (or later) becomes OUT;
+    # earlier ones are only counted (services/attendance.py)
+    "min_out_gap_minutes": 120,
     "min_face_pixels": 80,
     "crop_retention_days": 90,
     "motion_pixel_threshold": 25,

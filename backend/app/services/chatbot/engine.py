@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.settings import Setting
 from app.services.chatbot import llm
 from app.services.chatbot.policy import get_index
-from app.services.chatbot.report import build_report, parse_month, today
+from app.services.chatbot.report import build_detection_report, build_report, parse_date, parse_month, today
 from app.services.chatbot.targets import find_targets
 
 logger = structlog.get_logger(__name__)
@@ -63,6 +63,12 @@ TOOLS = [
                 "kind": {"type": "string", "enum": ["any", "employee", "department", "camera", "contractor"]},
                 "department": {"type": "string", "description": "only people in this department (to narrow down)"},
                 "month": {"type": "string", "description": "YYYY-MM the user asked about; omit for this month"},
+                "report": {"type": "string", "enum": ["attendance", "detections"],
+                           "description": "attendance = present/absent/late/leave/salary summary (default). "
+                                          "detections = how many times the person was seen by the cameras "
+                                          "(e.g. 'kitni baar detect hua')"},
+                "date": {"type": "string", "description": "YYYY-MM-DD if the user asked about one specific day"},
+                "camera": {"type": "string", "description": "camera name if the user named one (e.g. entry gate)"},
             },
             "required": ["query"],
         },
@@ -102,12 +108,16 @@ def _reply(text: str, **kw: Any) -> dict[str, Any]:
             "sources": kw.get("sources", []), "mode": kw.get("mode", "basic"), "notice": kw.get("notice")}
 
 
-def _choices_from(found: dict[str, Any], month: str) -> list[dict[str, Any]]:
+def _choices_from(found: dict[str, Any], month: str, extra: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """`extra`: report type / date / camera the question asked for; carried
+    on every button so the confirmed report is the one that was asked."""
+    extra = {k: v for k, v in (extra or {}).items() if v}
     if found.get("departments"):  # too many people: narrow by department first
         return [{"type": "filter", "kind": "employee", "query": found["query"], "department": d["name"],
-                 "label": d["name"], "sub": f"{d['count']} matching", "month": month}
+                 "label": d["name"], "sub": f"{d['count']} matching", "month": month, **extra}
                 for d in found["departments"][:10]]
-    return [{"type": "report", "kind": c["kind"], "id": c["id"], "label": c["label"], "sub": c["sub"], "month": month}
+    return [{"type": "report", "kind": c["kind"], "id": c["id"], "label": c["label"], "sub": c["sub"],
+             "month": month, **extra}
             for c in found["candidates"]]
 
 
@@ -135,12 +145,42 @@ def _sources(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # ------------------------------------------------------------------ actions (button clicks)
 async def run_action(db: AsyncSession, action: dict[str, Any], include_salary: bool, mode: str) -> dict[str, Any]:
     month = parse_month(action.get("month"))
+    extra = {k: action.get(k) for k in ("report", "date", "camera")}
     if action.get("type") == "filter":
         found = await find_targets(db, action.get("query", ""), "employee", department=action.get("department"))
         text = _found_text(found) if found["total"] else "Is department me koi match nahi."
-        return _reply(text, choices=_choices_from(found, month), mode=mode)
+        return _reply(text, choices=_choices_from(found, month, extra), mode=mode)
+    if action.get("report") == "detections":
+        month = action["date"][:7] if action.get("date") else month
+        report = await build_detection_report(db, action["kind"], action["id"], month, action.get("date"),
+                                              action.get("camera"))
+        return _reply(report["summary"], report=report, mode=mode)
     report = await build_report(db, action["kind"], action["id"], month, include_salary)
     return _reply(report["summary"], report=report, mode=mode)
+
+
+# ------------------------------------------------------------------ cameras
+async def resolve_camera(db: AsyncSession, text: str) -> str | None:
+    """A camera named in the text: its ID ("gate-1"), or "entry" / "exit"
+    when exactly one camera has that role or that word in its ID."""
+    from app.services.muster import camera_roles
+    from app.services.roster import camera_overview
+
+    t = (text or "").lower()
+    if not t.strip():
+        return None
+    cams = [c["kiosk_id"] for c in await camera_overview(db)]
+    norm = lambda x: re.sub(r"[\s_-]+", "", x.lower())  # noqa: E731
+    for k in sorted(cams, key=len, reverse=True):
+        if norm(k) and norm(k) in norm(t):
+            return k
+    roles = await camera_roles(db)
+    for word in ("entry", "exit"):
+        if re.search(rf"\b{word}\b", t):
+            hits = [k for k in cams if roles.get(k) == word] or [k for k in cams if word in k.lower()]
+            if len(hits) == 1:
+                return hits[0]
+    return None
 
 
 # ------------------------------------------------------------------ basic mode
@@ -154,8 +194,11 @@ def _plain(md: str) -> str:
 DATA_WORDS = re.compile(
     r"\b(attendance|attendence|hazri|haziri|salary|salry|payroll|tankhwah|late|absent|present|leave|report|detail|"
     r"details|summary|emp|employee|staff|department|dept|camera|contractor|ot|overtime|kitne din|data)\b", re.I)
+DETECT_WORDS = re.compile(
+    r"kitni\s*(baar|bar|dafa|dafe)|how many times|\bdetect(ed|ion|ions)?\b|\bdikh[aie]\b|\bseen\b|\btimes seen\b", re.I)
 FILLER = re.compile(
-    r"\b(ka|ki|ke|ko|kaa|kya|hai|hain|do|dijiye|dikhao|batao|bataiye|chahiye|mujhe|please|pls|show|give|me|of|for|the|"
+    r"\b(baar|bar|dafa|dafe|detect|detected|detection|detections|hua|hui|hue|dikha|dikhi|dikhe|seen|times|how|many|"
+    r"kitni|kitna|par|pr|pe|on|at|aaj|kal|today|yesterday|office|entry|exit|gate|\d{1,4}(st|nd|rd|th)?|ka|ki|ke|ko|kaa|kya|hai|hain|do|dijiye|dikhao|batao|bataiye|chahiye|mujhe|please|pls|show|give|me|of|for|the|"
     r"this|last|month|mahine|pichle|pichla|is|id|emp|employee|staff|department|dept|camera|contractor|attendance|"
     r"attendence|hazri|haziri|salary|salry|payroll|tankhwah|late|absent|present|leave|report|detail|details|summary|"
     r"poori|pura|puri|full|and|aur|data|ot|overtime|kitne|din|january|february|march|april|may|june|july|august|"
@@ -164,13 +207,20 @@ FILLER = re.compile(
 
 async def basic_answer(db: AsyncSession, message: str, notice: str | None = None) -> dict[str, Any]:
     month = parse_month(message)
-    wants_data = bool(DATA_WORDS.search(message))
-    name = re.sub(r"\s+", " ", FILLER.sub(" ", re.sub(r"[^\w\s-]", " ", message))).strip()
+    detections = bool(DETECT_WORDS.search(message))
+    wants_data = detections or bool(DATA_WORDS.search(message))
+    camera = await resolve_camera(db, message) if detections else None
+    extra = {"report": "detections" if detections else None, "date": parse_date(message) if detections else None,
+             "camera": camera}
+    text = message
+    if camera:
+        text = re.sub(re.escape(camera), " ", text, flags=re.I)
+    name = re.sub(r"\s+", " ", FILLER.sub(" ", re.sub(r"[^\w\s-]", " ", text))).strip(" -")
     found = await find_targets(db, name) if name else None
     if found and found["total"]:
         strong = found["candidates"][0]["score"] >= 80
         if wants_data or strong:
-            return _reply(_found_text(found), choices=_choices_from(found, month), notice=notice)
+            return _reply(_found_text(found), choices=_choices_from(found, month, extra), notice=notice)
     hits = get_index().search(message, k=3)
     if hits:
         best = [h for h in hits if h["score"] >= 0.7 * hits[0]["score"]][:2]
@@ -191,7 +241,7 @@ def system_prompt(cfg: dict[str, Any], org_name: str, can_see_salary: bool) -> s
 
 You have two sources:
 1. Company policy documents -> tool search_policy. Answer policy questions ONLY from the passages it returns and name the file you used, e.g. (leave_policy.pdf). If nothing relevant comes back, say the policy does not cover it. Never invent rules.
-2. The attendance / payroll database -> tool find_people. For ANY question about a person's, department's, camera's or contractor's attendance, late marks, absents, leave, OT, salary or payroll, call find_people with the name or ID (and month as YYYY-MM if the user named one). The app shows the matches as buttons; the user confirms one and the app itself shows the report table.
+2. The attendance / payroll database -> tool find_people. For ANY question about a person's, department's, camera's or contractor's attendance, late marks, absents, leave, OT, salary or payroll, call find_people with the name or ID (and month as YYYY-MM if the user named one). The app shows the matches as buttons; the user confirms one and the app itself shows the report table. For "how many times was X seen / detected (kitni baar detect hua)" questions, call find_people with report="detections", plus date (YYYY-MM-DD) and camera if the user gave them.
 
 Hard rules:
 - Never state attendance numbers, salaries or any figures about a person yourself. You don't have them.
@@ -234,7 +284,10 @@ async def llm_answer(
                     month = parse_month(tc.args.get("month")) if tc.args.get("month") else default_month
                     found = await find_targets(db, str(tc.args.get("query", "")), str(tc.args.get("kind") or "any"),
                                                department=tc.args.get("department") or None)
-                    choices = _choices_from(found, month)
+                    extra = {"report": tc.args.get("report") if tc.args.get("report") == "detections" else None,
+                             "date": parse_date(str(tc.args.get("date"))) if tc.args.get("date") else None,
+                             "camera": await resolve_camera(db, str(tc.args.get("camera") or ""))}
+                    choices = _choices_from(found, month, extra)
                     # the model gets names / departments only -- never numbers
                     result = {"total": found["total"],
                               "matches": [{"kind": c["kind"], "name": c["label"], "info": c["sub"]} for c in found["candidates"]],

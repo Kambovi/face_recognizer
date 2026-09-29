@@ -696,12 +696,7 @@ export interface LeaveOut {
 
 export type ChatTargetKind = "employee" | "department" | "camera" | "contractor";
 
-export interface ChatChoice {
-  type: "report" | "filter";
-  kind: ChatTargetKind;
-  id?: string;
-  query?: string;
-  department?: string;
+export interface ChatChoice extends ChatAction {
   label: string;
   sub: string;
   month: string;
@@ -727,6 +722,9 @@ export interface ChatReport {
   details: { columns: ChatColumn[]; rows: ChatRow[] } | null;
   summary: string;
   salary_hidden: boolean;
+  report: "attendance" | "detections";
+  date: string | null;
+  nav: { prev: (ChatAction & { label: string }) | null; next: (ChatAction & { label: string }) | null };
 }
 
 export interface ChatSource {
@@ -751,6 +749,9 @@ export interface ChatAction {
   query?: string;
   department?: string;
   month?: string;
+  report?: "attendance" | "detections";
+  date?: string;
+  camera?: string;
 }
 
 export interface ChatStatus {
