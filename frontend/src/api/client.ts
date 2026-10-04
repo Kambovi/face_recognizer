@@ -657,7 +657,9 @@ export async function getHealth(): Promise<HealthResponse> {
 
 export function mediaUrl(path: string | null): string | null {
   if (!path) return null;
-  return path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+  // absolute URL, so axios doesn't prefix its own /api/v1 baseURL again
+  // (with a same-origin build API_BASE_URL is "")
+  return path.startsWith("http") ? path : `${API_BASE_URL || window.location.origin}${path}`;
 }
 
 export default http;

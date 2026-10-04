@@ -177,7 +177,10 @@ def compute_payslip(inp: PayslipInput, cfg: dict[str, Any]) -> dict[str, Any]:
         "employee_id": inp.employee_id, "emp_code": inp.emp_code, "name": inp.name,
         "department": inp.department, "designation": inp.designation, "month": inp.month,
         "date_of_joining": inp.date_of_joining, "date_of_leaving": inp.date_of_leaving,
-        "days_in_month": dim, "days_counted": counted, "paid_days": paid, "lop_days": round(dim - paid, 2),
+        "days_in_month": dim, "days_counted": counted, "paid_days": paid,
+        # loss of pay = days on the roll that aren't paid; days before joining /
+        # after leaving are "not on roll", not LOP (and not NCP days in the ECR)
+        "lop_days": round(max(0.0, counted - paid), 2), "days_not_on_roll": round(max(0.0, dim - counted), 2),
         "attendance": {k: t.get(k) for k in ("present", "half_days", "absent", "leave", "unpaid_leave", "weekly_off",
                                               "holidays", "worked_on_off", "worked_on_holiday", "not_tracked",
                                               "late_days", "ot_hours")},

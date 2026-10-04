@@ -249,3 +249,13 @@ def test_amount_in_words(n, words):
     from app.services.payroll_files import amount_in_words
 
     assert amount_in_words(n) == words
+
+
+def test_new_joiner_days_are_not_loss_of_pay():
+    full = structure(15500, None, CFG)
+    inp = PayslipInput(employee_id="x", emp_code="E9", name="New", department=None, designation=None, month="2026-09",
+                       full=full, totals={"paid_days": 15, "days_in_range": 15, "ot_hours": 0},
+                       profile={"pt_state": "MH", "gender": "M"}, date_of_joining="2026-09-16")
+    s = compute_payslip(inp, CFG)
+    assert s["lop_days"] == 0 and s["days_not_on_roll"] == 15 and s["gross"] == 7750
+    assert {d["code"]: d["amount"] for d in s["deductions"]}["pt"] == 175  # 7,501-10,000 slab
