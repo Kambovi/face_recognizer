@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -44,6 +45,14 @@ class Employee(Base):
     # (services/payroll.py). Only admins ever see it. None = not set.
     monthly_salary: Mapped[float | None] = mapped_column(sa.Numeric(12, 2), nullable=True)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+    # Payroll proration: days before joining / after leaving are not paid and
+    # not counted as absent. None = not entered (falls back to created_at).
+    date_of_joining: Mapped[dt.date | None] = mapped_column(sa.Date(), nullable=True)
+    date_of_leaving: Mapped[dt.date | None] = mapped_column(sa.Date(), nullable=True)
+    # Own weekly-off weekdays (0=Mon..6=Sun). None = company default
+    # (settings.weekly_off_days). [] = no fixed weekly off (rotating offs are
+    # marked day by day as leave kind "off").
+    weekly_off_days: Mapped[list[int] | None] = mapped_column(sa.JSON(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, default=utcnow
     )

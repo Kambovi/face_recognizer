@@ -10,7 +10,6 @@ a real deployment would extend `shifts` with a working-days bitmask.
 """
 from __future__ import annotations
 
-import csv
 import io
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -19,6 +18,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import csvsafe
 from app.models.attendance_events import AttendanceEvent
 from app.models.employees import Employee
 from app.models.enums import EventType, SubjectType
@@ -214,7 +214,7 @@ async def compute_summary(
 
 def rows_to_csv(rows: list[SummaryRow]) -> str:
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    writer = csvsafe.writer(buf)
     writer.writerow(
         [
             "Face ID", "Name", "Designation", "Department", "Shift IN", "Shift OUT",

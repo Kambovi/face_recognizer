@@ -23,3 +23,14 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, default=utcnow
     )
+    name: Mapped[str | None] = mapped_column(sa.String(120), nullable=True)
+    is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True, server_default=sa.true())
+    # First login with a temporary / default password -> must set a new one
+    # before anything else works (deps.get_current_user).
+    must_change_password: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False, server_default=sa.false())
+    # Bumped on password change / "log out everywhere": every older token dies.
+    token_version: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0, server_default="0")
+    failed_logins: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0, server_default="0")
+    locked_until: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    password_changed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)

@@ -21,7 +21,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.deps import get_current_user, http_error, require_admin
+from app.deps import get_current_user, http_error, require_hr
 from app.models.employees import Employee
 from app.models.shift_assignments import ShiftAssignment
 from app.models.shifts import Shift
@@ -91,7 +91,7 @@ async def list_shifts(db: AsyncSession = Depends(get_db), _user: User = Depends(
 
 @router.post("", response_model=ShiftOut, status_code=201)
 async def create_shift(
-    payload: ShiftIn, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    payload: ShiftIn, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> ShiftOut:
     shift = Shift(
         name=payload.name, in_time=_parse(payload.in_time), out_time=_parse(payload.out_time),
@@ -108,7 +108,7 @@ async def create_shift(
 
 @router.patch("/{shift_id}", response_model=ShiftOut)
 async def update_shift(
-    shift_id: str, payload: ShiftPatch, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    shift_id: str, payload: ShiftPatch, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> ShiftOut:
     shift = await db.get(Shift, shift_id)
     if shift is None:
@@ -131,7 +131,7 @@ async def update_shift(
 
 
 @router.delete("/{shift_id}", status_code=204, response_model=None)
-async def delete_shift(shift_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)) -> None:
+async def delete_shift(shift_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)) -> None:
     shift = await db.get(Shift, shift_id)
     if shift is None:
         raise http_error(status.HTTP_404_NOT_FOUND, "not_found", "Shift not found")
@@ -218,7 +218,7 @@ async def assign_range(db: AsyncSession, employee_id: str, shift_id: str, start:
 
 @router.post("/roster", status_code=201)
 async def assign_roster(
-    payload: RosterAssign, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    payload: RosterAssign, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> dict[str, int]:
     if payload.end_date < payload.start_date:
         raise http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, "bad_range", "end_date is before start_date")
@@ -241,7 +241,7 @@ async def assign_roster(
 
 @router.delete("/roster/{assignment_id}", status_code=204, response_model=None)
 async def delete_roster_row(
-    assignment_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    assignment_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> None:
     row = await db.get(ShiftAssignment, assignment_id)
     if row is None:

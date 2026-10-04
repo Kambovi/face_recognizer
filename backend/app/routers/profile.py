@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import csv
 import io
 
 from fastapi import APIRouter, Depends
@@ -18,6 +17,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import csvsafe
 from app.db import get_db
 from app.deps import get_current_user, require_admin
 from app.services.audit import write_audit
@@ -64,7 +64,7 @@ async def muster_csv(db: AsyncSession = Depends(get_db), _user: User = Depends(g
     m = await muster(db)
     buf = io.StringIO()
     buf.write("\ufeff")
-    w = csv.writer(buf)
+    w = csvsafe.writer(buf)
     w.writerow(["Status", "ID", "Name", "Department", "Contractor", "Last seen", "Camera", "Safe (tick)"])
     for r in m["inside"]:
         w.writerow(["Inside", r["emp_code"], r["name"], r["department"] or "", r["contractor"] or "",

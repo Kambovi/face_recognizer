@@ -22,6 +22,11 @@ class ApiClient:
             resp = self._client.post(
                 f"{self.base_url}/api/v1/kiosk/event", json=payload, headers=self._headers
             )
+            if resp.status_code in (400, 409, 413, 422):
+                # The server looked at it and will never accept it (too old,
+                # clock wrong, bad crop): drop it instead of queueing forever.
+                logger.warning("kiosk_event_rejected", status=resp.status_code, body=resp.text[:200])
+                return True
             resp.raise_for_status()
             return True
         except httpx.HTTPError as exc:

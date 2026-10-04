@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attendance_events import AttendanceEvent
@@ -86,8 +86,19 @@ async def _events_today_for_subject(
         stmt = stmt.where(AttendanceEvent.employee_id == employee_id)
     else:
         stmt = stmt.where(AttendanceEvent.unknown_identity_id == unknown_identity_id)
+    # Only the few days around `day` can belong to it (a night shift spans
+    # two dates) -- don't load the person's whole history on every event.
+    d = day if isinstance(day, date) else date.fromisoformat(str(day))
+    lo = datetime.combine(d - timedelta(days=1), datetime.min.time(), tzinfo=LOCAL_TZ)
+    hi = datetime.combine(d + timedelta(days=2), datetime.min.time(), tzinfo=LOCAL_TZ)
+    stmt = stmt.where(AttendanceEvent.occurred_at >= lo, AttendanceEvent.occurred_at < hi)
     stmt = stmt.order_by(AttendanceEvent.occurred_at.asc())
     if db.bind is not None and db.bind.dialect.name == "postgresql":
+        # Serialise concurrent events of the same subject (two cameras at the
+        # same second) until this transaction commits -- FOR UPDATE alone
+        # can't lock rows that don't exist yet (the day's first IN).
+        await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+                         {"k": f"att:{subject_type.value}:{employee_id or unknown_identity_id}"})
         stmt = stmt.with_for_update()
     result = await db.execute(stmt)
     all_events = list(result.scalars().all())
@@ -186,7 +197,9 @@ def _apply_rules(
         return ev, True
     if t < in_ev.occurred_at:
         # a late-arriving (offline-queued) earlier detection: IN = the earliest
-        _refresh(in_ev, data)
+        # -- unless HR fixed the IN time by hand: a correction always wins.
+        if not in_ev.is_manual_override:
+            _refresh(in_ev, data)
         return in_ev, False
     if role == "entry":
         return in_ev, False
@@ -196,7 +209,7 @@ def _apply_rules(
         ev = _new_event(data, EventType.OUT)
         db.add(ev)
         return ev, True
-    if t >= out_ev.occurred_at:
+    if t >= out_ev.occurred_at and not out_ev.is_manual_override:
         _refresh(out_ev, data)
     return out_ev, False
 
@@ -232,6 +245,16 @@ async def reassign_single_event(
     old_employee_id = event.employee_id
     old_unknown_id = event.unknown_identity_id
     day = local_date(event.occurred_at)
+
+    async def _day_of(emp_id: str | None) -> tuple["date | str", DayOf | None]:
+        # employees: shift-aware day (a night shift's 06:00 OUT belongs to the
+        # previous date), unknowns: calendar day
+        if not emp_id:
+            return day, None
+        from app.services.shiftday import load_resolver
+
+        resolver = await load_resolver(db, [emp_id])
+        return resolver.attendance_date(emp_id, event.occurred_at), (lambda ts: resolver.attendance_date(emp_id, ts))
 
     event.original_employee_id = event.original_employee_id or old_employee_id
     event.original_unknown_identity_id = event.original_unknown_identity_id or old_unknown_id
@@ -269,14 +292,17 @@ async def reassign_single_event(
 
     # Recompute IN/OUT for the OLD subject's remaining events that day.
     if old_subject_type == SubjectType.EMPLOYEE and old_employee_id:
-        old_events = await _events_today_for_subject(db, SubjectType.EMPLOYEE, old_employee_id, None, day)
+        d_old, f_old = await _day_of(old_employee_id)
+        old_events = await _events_today_for_subject(db, SubjectType.EMPLOYEE, old_employee_id, None, d_old, f_old)
         recompute_day_in_out([e for e in old_events if e.id != event.id])
     elif old_subject_type == SubjectType.UNKNOWN and old_unknown_id:
         old_events = await _events_today_for_subject(db, SubjectType.UNKNOWN, None, old_unknown_id, day)
         recompute_day_in_out([e for e in old_events if e.id != event.id])
 
     # Recompute IN/OUT for the NEW subject's events that day (including this one).
-    new_events = await _events_today_for_subject(db, event.subject_type, event.employee_id, event.unknown_identity_id, day)
+    d_new, f_new = await _day_of(event.employee_id if event.subject_type == SubjectType.EMPLOYEE else None)
+    new_events = await _events_today_for_subject(db, event.subject_type, event.employee_id,
+                                                 event.unknown_identity_id, d_new, f_new)
     recompute_day_in_out(new_events)
 
     await db.flush()

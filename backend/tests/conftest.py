@@ -24,6 +24,24 @@ from app.models.users import User
 from app.security import create_access_token, hash_password
 
 
+@pytest.fixture(autouse=True)
+def _old_fixed_dates_allowed(monkeypatch):
+    """Most tests post events at fixed 2026 dates; the live age limit
+    (max_event_age_hours) is tested on its own in test_security.py."""
+    from app.services import settings_service
+
+    monkeypatch.setitem(settings_service.DEFAULT_SETTINGS, "max_event_age_hours", 24 * 365 * 50)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_throttle():
+    from app.services.passwords import login_throttle
+
+    login_throttle.reset()
+    yield
+
+
 @pytest_asyncio.fixture
 async def db_session():
     engine = create_async_engine(

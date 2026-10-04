@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.deps import get_current_user, http_error, require_admin
+from app.deps import get_current_user, http_error, require_hr
 from app.models.employees import Employee
 from app.models.leaves import Leave
 from app.models.users import User
@@ -67,7 +67,7 @@ async def list_leaves(
 
 
 @router.post("", status_code=201)
-async def add_leave(payload: LeaveIn, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)) -> dict[str, Any]:
+async def add_leave(payload: LeaveIn, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)) -> dict[str, Any]:
     emp = (await db.execute(
         select(Employee).where(Employee.id == payload.employee_id, Employee.deleted_at.is_(None))
     )).scalar_one_or_none()
@@ -93,7 +93,7 @@ async def add_leave(payload: LeaveIn, db: AsyncSession = Depends(get_db), user: 
 
 
 @router.delete("/{leave_id}", status_code=204, response_model=None)
-async def delete_leave(leave_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)) -> None:
+async def delete_leave(leave_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)) -> None:
     lv = (await db.execute(select(Leave).where(Leave.id == leave_id))).scalar_one_or_none()
     if lv is None:
         raise http_error(status.HTTP_404_NOT_FOUND, "leave_not_found", "Leave not found")

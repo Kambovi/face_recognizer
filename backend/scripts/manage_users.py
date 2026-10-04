@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """Dashboard login users -- list / create / reset password / change role / delete.
 
-There is no "Users" screen in the web app, so this is THE way to give
-someone a login. Run it from the `backend` folder with the backend venv
+Logins can also be managed in the dashboard (Settings -> Users, admin
+only); this script is for the server console and for recovery (e.g. the
+last admin forgot the password). Run it from the `backend` folder with the backend venv
 active (same folder you run uvicorn from, so it uses the same database):
 
     cd "D:\\DS PROJECTS\\face-attendance\\backend"
@@ -16,8 +17,9 @@ active (same folder you run uvicorn from, so it uses the same database):
 
 Passwords are asked interactively (hidden, typed twice) unless --password
 is given. Roles:
-    admin  -- everything (employees, enrollment, unknowns, settings, corrections)
-    viewer -- read-only dashboard / analytics
+    admin  -- everything (employees, enrollment, unknowns, settings, users, cameras)
+    hr     -- people, leave, holidays, attendance fixes, payroll (no settings/users)
+    viewer -- read-only dashboard / analytics, no salaries
 
 The backend does NOT need to be restarted after any of these. Every change
 is also written to the audit_log table.
@@ -41,7 +43,7 @@ from app.models.users import User  # noqa: E402
 from app.security import hash_password  # noqa: E402
 from app.services.audit import write_audit  # noqa: E402
 
-MIN_PASSWORD_LEN = 8
+from app.services.passwords import password_problem  # noqa: E402
 
 
 def _ask_password(given: str | None) -> str:
@@ -51,8 +53,9 @@ def _ask_password(given: str | None) -> str:
         pw = getpass.getpass("New password: ")
         if pw != getpass.getpass("Repeat password: "):
             sys.exit("ERROR: passwords do not match.")
-    if len(pw) < MIN_PASSWORD_LEN:
-        sys.exit(f"ERROR: password must be at least {MIN_PASSWORD_LEN} characters.")
+    problem = password_problem(pw)
+    if problem:
+        sys.exit(f"ERROR: {problem}.")
     return pw
 
 
@@ -100,9 +103,14 @@ async def cmd_reset_password(args) -> None:
         user = await _get_user(db, args.email)
         pw = _ask_password(args.password)
         user.password_hash = hash_password(pw)
+        user.must_change_password = False
+        user.locked_until = None
+        user.failed_logins = 0
+        user.is_active = True
+        user.token_version = (user.token_version or 0) + 1
         await write_audit(db, None, "user_password_reset_cli", "user", user.id, after={"email": user.email})
         await db.commit()
-    print(f"OK: password changed for {user.email}. Already-open sessions stay valid until their token expires (8h).")
+    print(f"OK: password changed for {user.email}. Their other open sessions have been logged out.")
 
 
 async def cmd_set_role(args) -> None:
@@ -112,9 +120,10 @@ async def cmd_set_role(args) -> None:
         if old == "admin" and args.role != "admin" and await _admin_count(db) <= 1:
             sys.exit("ERROR: this is the last admin -- create another admin first.")
         user.role = UserRole(args.role)
+        user.token_version = (user.token_version or 0) + 1
         await write_audit(db, None, "user_role_change_cli", "user", user.id, before={"role": old}, after={"role": args.role})
         await db.commit()
-    print(f"OK: {user.email}: {old} -> {args.role}. They must log out and log in again to get the new role.")
+    print(f"OK: {user.email}: {old} -> {args.role}. They have to log in again.")
 
 
 async def cmd_delete(args) -> None:
@@ -136,14 +145,14 @@ def main() -> None:
     sub.add_parser("list", help="show all users")
     c = sub.add_parser("create", help="add a new login")
     c.add_argument("--email", required=True)
-    c.add_argument("--role", choices=["admin", "viewer"], default="viewer")
+    c.add_argument("--role", choices=["admin", "hr", "viewer"], default="viewer")
     c.add_argument("--password", help="skip the prompt (avoid: it stays in shell history)")
     r = sub.add_parser("reset-password", help="set a new password")
     r.add_argument("--email", required=True)
     r.add_argument("--password")
     s = sub.add_parser("set-role", help="make admin / viewer")
     s.add_argument("--email", required=True)
-    s.add_argument("--role", choices=["admin", "viewer"], required=True)
+    s.add_argument("--role", choices=["admin", "hr", "viewer"], required=True)
     d = sub.add_parser("delete", help="remove a login")
     d.add_argument("--email", required=True)
     d.add_argument("--yes", action="store_true", help="don't ask for confirmation")

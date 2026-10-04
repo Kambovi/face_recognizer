@@ -53,6 +53,16 @@ async def on_event(
                 title=f"Watchlist: {employee.name} ({employee.emp_code}) at {kiosk}",
                 detail=employee.watchlist_reason,
             )
+    elif employee is not None and (not employee.is_active or employee.deleted_at is not None):
+        # Someone who has left (or was deactivated) walked in -- worth a look.
+        since = at - timedelta(minutes=float(config.get("alert_cooldown_minutes", 30)))
+        if not await _recent(db, since, kind="inactive_seen", employee_id=employee.id):
+            left = f" (left {employee.date_of_leaving})" if employee.date_of_leaving else ""
+            alert = Alert(
+                kind="inactive_seen", kiosk_id=kiosk, employee_id=employee.id, event_id=event.id,
+                title=f"Inactive person seen: {employee.name} ({employee.emp_code}) at {kiosk}",
+                detail=f"Marked inactive{left}",
+            )
     elif unknown is not None and unknown.watchlist_reason:
         since = at - timedelta(minutes=float(config.get("alert_cooldown_minutes", 30)))
         if not await _recent(db, since, kind="watchlist", unknown_identity_id=unknown.id):

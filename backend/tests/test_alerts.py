@@ -19,8 +19,8 @@ CONFIG = dict(DEFAULT_SETTINGS, similarity_threshold=0.3)
 T0 = dt.datetime(2026, 9, 26, 5, 0, tzinfo=dt.timezone.utc)
 
 
-async def _enrolled(db, code: str, reason: str | None) -> tuple[Employee, list[float]]:
-    emp = Employee(face_id=f"F-{code}", emp_code=code, name=f"Name {code}", watchlist_reason=reason, is_active=False)
+async def _enrolled(db, code: str, reason: str | None, active: bool = False) -> tuple[Employee, list[float]]:
+    emp = Employee(face_id=f"F-{code}", emp_code=code, name=f"Name {code}", watchlist_reason=reason, is_active=active)
     db.add(emp)
     await db.flush()
     vec = np.zeros(512)
@@ -48,9 +48,17 @@ async def test_watchlisted_person_raises_one_alert_per_cooldown(db_session):
 
 
 async def test_normal_people_raise_nothing(db_session):
-    _, vec = await _enrolled(db_session, "OK", None)
+    _, vec = await _enrolled(db_session, "OK", None, active=True)
     await process_kiosk_event(db_session, _ev(1, 0, vec, liveness_score=0.9), CONFIG)
     assert (await db_session.execute(select(Alert))).first() is None
+
+
+async def test_inactive_person_seen_raises_an_alert(db_session):
+    emp, vec = await _enrolled(db_session, "LEFT", None, active=False)
+    await process_kiosk_event(db_session, _ev(1, 0, vec, liveness_score=0.9), CONFIG)
+    await process_kiosk_event(db_session, _ev(2, 5, vec, liveness_score=0.9), CONFIG)  # cool-down
+    alerts = (await db_session.execute(select(Alert))).scalars().all()
+    assert [a.kind for a in alerts] == ["inactive_seen"] and alerts[0].employee_id == emp.id
 
 
 async def test_spoof_alert_but_not_for_missing_model(db_session):

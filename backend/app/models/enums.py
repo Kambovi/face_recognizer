@@ -40,5 +40,6 @@ class UnknownStatus(str, enum.Enum):
 
 
 class UserRole(str, enum.Enum):
-    ADMIN = "admin"
-    VIEWER = "viewer"
+    ADMIN = "admin"    # everything, incl. settings, users, cameras
+    HR = "hr"          # people, leave, holidays, attendance fixes, payroll -- not settings/users
+    VIEWER = "viewer"  # read-only dashboards and reports, never salaries

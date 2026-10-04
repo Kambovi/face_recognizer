@@ -54,6 +54,25 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "unknown_recent_threshold": 0.30,
     "unknown_auto_ignore_days": 30,
     "working_days_per_week": 5,
+    # --- Kiosk event sanity (routers/kiosk.py) ---
+    # A camera's clock may drift a little; events further in the future are
+    # rejected. Offline-queued events older than max_event_age_hours are
+    # rejected too (they can't be told apart from back-dated fakes).
+    "max_event_future_minutes": 5,
+    "max_event_age_hours": 72,
+    # Go-live date (YYYY-MM-DD). Days before it are "not tracked" (NT, paid)
+    # instead of absent. Set automatically on upgrade; editable in Settings.
+    "attendance_start_date": None,
+    # Leave types for the leave register + balances (services/leave_balance.py).
+    # paid=False -> LWP. annual = days per calendar year (credited pro-rata
+    # monthly when accrual is "monthly"). carry_forward = max days carried
+    # into next year (0 = lapse).
+    "leave_types": [
+        {"code": "CL", "name": "Casual leave", "paid": True, "annual": 12, "accrual": "monthly", "carry_forward": 0},
+        {"code": "SL", "name": "Sick leave", "paid": True, "annual": 7, "accrual": "yearly", "carry_forward": 0},
+        {"code": "EL", "name": "Earned leave", "paid": True, "annual": 15, "accrual": "monthly", "carry_forward": 30},
+        {"code": "LWP", "name": "Leave without pay", "paid": False, "annual": 0, "accrual": "none", "carry_forward": 0},
+    ],
     # --- Timesheet / payroll (services/timesheet.py) ---
     # Weekly off days, Mon=0 .. Sun=6. Used by timesheets and payroll exports.
     "weekly_off_days": [6],

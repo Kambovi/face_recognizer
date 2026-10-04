@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.deps import get_current_user, http_error, require_admin
+from app.deps import get_current_user, http_error, require_hr
 from app.models.consents import Consent
 from app.models.employees import Employee
 from app.models.enums import OwnerType, UnknownStatus
@@ -74,7 +74,7 @@ async def list_unknowns(
 
 @router.get("/{unknown_id}/templates", response_model=list[FaceTemplateOut])
 async def list_unknown_templates(
-    unknown_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_admin)
+    unknown_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_hr)
 ) -> list[FaceTemplateOut]:
     """Mirrors GET /employees/{id}/templates -- needed so the HR dashboard's
     Split action can show which sightings exist on an unknown identity
@@ -95,7 +95,7 @@ async def list_unknown_templates(
 
 @router.patch("/{unknown_id}", response_model=UnknownIdentityOut)
 async def update_unknown(
-    unknown_id: str, payload: UnknownUpdateRequest, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    unknown_id: str, payload: UnknownUpdateRequest, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> UnknownIdentityOut:
     unknown = await _get_unknown_or_404(db, unknown_id)
     before = {"label": unknown.label, "status": unknown.status.value}
@@ -114,7 +114,7 @@ async def update_unknown(
 
 @router.delete("/{unknown_id}", status_code=204, response_model=None)
 async def delete_unknown(
-    unknown_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    unknown_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> None:
     from app.models.attendance_events import AttendanceEvent
     from app.models.enums import OwnerType
@@ -137,7 +137,7 @@ async def delete_unknown(
 
 @router.post("/{unknown_id}/link", response_model=UnknownIdentityOut)
 async def link_unknown(
-    unknown_id: str, payload: LinkRequest, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    unknown_id: str, payload: LinkRequest, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> UnknownIdentityOut:
     unknown = await _get_unknown_or_404(db, unknown_id)
     result = await db.execute(select(Employee).where(Employee.id == payload.employee_id, Employee.deleted_at.is_(None)))
@@ -158,7 +158,7 @@ async def link_unknown(
 
 @router.post("/{unknown_id}/promote", response_model=PromoteResponse)
 async def promote_unknown(
-    unknown_id: str, payload: PromoteRequest, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    unknown_id: str, payload: PromoteRequest, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> PromoteResponse:
     unknown = await _get_unknown_or_404(db, unknown_id)
 
@@ -190,7 +190,7 @@ async def promote_unknown(
 
 @router.post("/{unknown_id}/split", response_model=SplitResponse)
 async def split_unknown_endpoint(
-    unknown_id: str, payload: SplitRequest, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    unknown_id: str, payload: SplitRequest, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> SplitResponse:
     unknown = await _get_unknown_or_404(db, unknown_id)
     try:

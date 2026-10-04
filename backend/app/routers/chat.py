@@ -19,8 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.deps import get_current_user, http_error, require_admin
-from app.models.enums import UserRole
+from app.deps import can_see_salary, get_current_user, http_error, require_admin
 from app.models.users import User
 from app.services.audit import write_audit
 from app.services.chatbot import engine, llm
@@ -72,7 +71,7 @@ async def chat_status(db: AsyncSession = Depends(get_db), user: User = Depends(g
         "mode": engine.mode_of(cfg),
         "provider": cfg.get("provider"),
         "model": cfg.get("model"),
-        "can_see_salary": user.role == UserRole.ADMIN,
+        "can_see_salary": can_see_salary(user),
         "policy": {"files": idx["files"], "chunks": idx["chunks"]},
     }
 
@@ -84,7 +83,7 @@ async def chat(payload: ChatIn, db: AsyncSession = Depends(get_db), user: User =
         raise http_error(403, "chatbot_disabled", "Chatbot is turned off in Settings")
     if payload.action and payload.action.type == "report" and not payload.action.id:
         raise http_error(422, "bad_action", "action.id is required")
-    can_see_salary = user.role == UserRole.ADMIN
+    see_salary = can_see_salary(user)
     profile = await get_profile(db)
     reply = await engine.respond(
         db, cfg,
@@ -92,7 +91,7 @@ async def chat(payload: ChatIn, db: AsyncSession = Depends(get_db), user: User =
         history=[h.model_dump() for h in payload.history],
         action=payload.action.model_dump() if payload.action else None,
         org_name=str(profile.get("org_name") or "the organisation"),
-        can_see_salary=can_see_salary,
+        can_see_salary=see_salary,
     )
     rep = reply.get("report")
     if rep:

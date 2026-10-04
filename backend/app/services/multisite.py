@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alerts import Alert
 from app.models.settings import Setting
+from app.security import decrypt_text, encrypt_text
 from app.services.analytics_overview import compute_overview
 from app.services.client_profile import get_profile
 from app.services.muster import muster
@@ -74,11 +75,15 @@ async def build_snapshot(db: AsyncSession) -> dict[str, Any]:
 
 async def get_link(db: AsyncSession) -> dict[str, Any]:
     row = (await db.execute(select(Setting).where(Setting.key == LINK_KEY))).scalar_one_or_none()
-    return dict(row.value_json) if row is not None else {}
+    link = dict(row.value_json) if row is not None else {}
+    if link.get("token"):
+        link["token"] = decrypt_text(link["token"])
+    return link
 
 
 async def save_link(db: AsyncSession, link: dict[str, Any]) -> None:
     row = (await db.execute(select(Setting).where(Setting.key == LINK_KEY))).scalar_one_or_none()
+    link = {**link, "token": encrypt_text(link.get("token") or "")}
     if row is None:
         db.add(Setting(key=LINK_KEY, value_json=link))
     else:

@@ -9,10 +9,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import get_settings
+from app.config import get_settings, insecure_settings, validate_for_production
 from app.routers import (
     alerts,
     chat,
+    devices,
+    users,
     hq,
     leaves,
     notify,
@@ -41,6 +43,7 @@ structlog.configure(
 logger = structlog.get_logger(__name__)
 
 settings = get_settings()
+validate_for_production(settings)  # production + published secrets -> refuse to start
 
 
 def _migrate_to_head() -> None:
@@ -60,7 +63,11 @@ def _migrate_to_head() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    logger.info("api_startup", database=settings.database_url.split("@")[-1])
+    logger.info("api_startup", database=settings.database_url.split("@")[-1], env=settings.app_env)
+    weak = insecure_settings(settings)
+    if weak:
+        logger.warning("INSECURE_SECRETS", secrets=weak,
+                       fix="python scripts/gen_secrets.py --write  (required before going live)")
     if ":memory:" not in settings.database_url:
         import asyncio
 
@@ -76,22 +83,49 @@ async def lifespan(_app: FastAPI):
         from app.db import AsyncSessionLocal
         from app.services.multisite import push_loop
         from app.services.notify import schedule_loop
+        from app.services.retention import retention_loop
 
-        push_task = asyncio.gather(push_loop(AsyncSessionLocal), schedule_loop(AsyncSessionLocal))
+        push_task = asyncio.gather(
+            push_loop(AsyncSessionLocal), schedule_loop(AsyncSessionLocal), retention_loop(AsyncSessionLocal)
+        )
     yield
     if push_task is not None:
         push_task.cancel()
 
 
-app = FastAPI(title="Face Attendance API", version="1.0.0", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[settings.cors_origins] if settings.cors_origins != "*" else ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="Face Attendance API",
+    version="3.0.0",
+    lifespan=lifespan,
+    # no public API explorer on a live install
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None,
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
+
+if settings.cors_origin_list:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        # auth is a bearer header, never a cookie -> no credentials needed
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type", "X-Site-Token"],
+    )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):  # type: ignore[no-untyped-def]
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    if settings.is_production:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 
 @app.exception_handler(HTTPException)
@@ -132,3 +166,5 @@ app.include_router(hq.router, prefix=API_PREFIX)
 app.include_router(notify.router, prefix=API_PREFIX)
 app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(leaves.router, prefix=API_PREFIX)
+app.include_router(users.router, prefix=API_PREFIX)
+app.include_router(devices.router, prefix=API_PREFIX)

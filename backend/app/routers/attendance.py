@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.deps import get_current_user, http_error, require_admin
+from app.deps import get_current_user, http_error, require_hr
 from app.models.attendance_events import AttendanceEvent
 from app.models.employees import Employee
 from app.models.enums import EventType, RejectReason, SubjectType
@@ -74,7 +74,7 @@ async def manual_override(
     event_id: str,
     payload: ManualOverrideRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_admin),
+    user: User = Depends(require_hr),
 ) -> AttendanceEventOut:
     result = await db.execute(select(AttendanceEvent).where(AttendanceEvent.id == event_id))
     event = result.scalar_one_or_none()
@@ -102,7 +102,7 @@ async def reassign_event(
     event_id: str,
     payload: ReassignRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_admin),
+    user: User = Depends(require_hr),
 ) -> AttendanceEventOut:
     result = await db.execute(select(AttendanceEvent).where(AttendanceEvent.id == event_id))
     event = result.scalar_one_or_none()
@@ -130,7 +130,7 @@ MANUAL_KIOSK_ID = "manual"
 async def create_manual_event(
     payload: ManualEventCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_admin),
+    user: User = Depends(require_hr),
 ) -> AttendanceEventOut:
     employee = (
         await db.execute(select(Employee).where(Employee.id == payload.employee_id, Employee.deleted_at.is_(None)))

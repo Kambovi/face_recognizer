@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.settings import Setting
+from app.security import decrypt_text, encrypt_text
 from app.services.chatbot import llm
 from app.services.chatbot.policy import get_index
 from app.services.chatbot.report import build_detection_report, build_report, parse_date, parse_month, today
@@ -79,12 +80,15 @@ TOOLS = [
 # ------------------------------------------------------------------ config
 async def get_config(db: AsyncSession) -> dict[str, Any]:
     row = (await db.execute(select(Setting).where(Setting.key == KEY))).scalar_one_or_none()
-    return {**DEFAULTS, **(dict(row.value_json) if row is not None else {})}
+    cfg = {**DEFAULTS, **(dict(row.value_json) if row is not None else {})}
+    cfg["api_key"] = decrypt_text(cfg.get("api_key"))  # stored encrypted (security.encrypt_text)
+    return cfg
 
 
 async def save_config(db: AsyncSession, cfg: dict[str, Any]) -> None:
     row = (await db.execute(select(Setting).where(Setting.key == KEY))).scalar_one_or_none()
     clean = {k: cfg.get(k, v) for k, v in DEFAULTS.items()}
+    clean["api_key"] = encrypt_text(clean.get("api_key") or "")
     if row is None:
         db.add(Setting(key=KEY, value_json=clean))
     else:

@@ -13,7 +13,6 @@ CSV files carry a UTF-8 BOM so Excel opens Hindi / accented names correctly.
 from __future__ import annotations
 
 import calendar
-import csv
 import io
 from collections import defaultdict
 from datetime import date
@@ -25,6 +24,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import csvsafe
 from app.db import get_db
 from app.deps import get_current_user, http_error
 from app.models.employees import Employee
@@ -47,7 +47,7 @@ def _check_range(date_from: date, date_to: date) -> None:
 def _csv(rows: list[list[Any]], filename: str) -> Response:
     buf = io.StringIO()
     buf.write("﻿")
-    csv.writer(buf).writerows(rows)
+    csvsafe.writer(buf).writerows(rows)
     return Response(
         content=buf.getvalue(),
         media_type="text/csv; charset=utf-8",

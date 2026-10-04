@@ -26,36 +26,64 @@ from typing import Any
 
 import numpy as np
 from cryptography.fernet import Fernet
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
+import jwt
 
 from app.config import get_settings
 
 settings = get_settings()
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt only looks at the first 72 bytes; longer passwords are rejected by
+# the password policy (services/passwords.py) instead of silently truncated.
+_BCRYPT_MAX = 72
+# A real-looking hash to verify against when the user does not exist, so a
+# wrong email and a wrong password take the same time (no user enumeration).
+_DUMMY_HASH = bcrypt.hashpw(b"timing-equaliser", bcrypt.gensalt(rounds=12)).decode()
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode()[:_BCRYPT_MAX], bcrypt.gensalt(rounds=12)).decode()
 
 
-def verify_password(password: str, password_hash: str) -> bool:
-    return pwd_context.verify(password, password_hash)
+def verify_password(password: str, password_hash: str | None) -> bool:
+    """Constant-ish time: always runs one bcrypt check, even for unknown users.
+    Works with hashes made by the old passlib code ($2b$ format)."""
+    target = password_hash or _DUMMY_HASH
+    try:
+        ok = bcrypt.checkpw(password.encode()[:_BCRYPT_MAX], target.encode())
+    except ValueError:
+        return False
+    return ok and password_hash is not None
 
 
-def create_access_token(subject: str, role: str, expires_minutes: int | None = None) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=expires_minutes or settings.jwt_expire_minutes
-    )
-    payload: dict[str, Any] = {"sub": subject, "role": role, "exp": expire}
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+ALLOWED_JWT_ALGORITHMS = {"HS256", "HS384", "HS512"}
+
+
+def _alg() -> str:
+    alg = settings.jwt_algorithm.upper()
+    if alg not in ALLOWED_JWT_ALGORITHMS:  # never "none", never asymmetric confusion
+        raise RuntimeError(f"Unsupported JWT_ALGORITHM {settings.jwt_algorithm!r}")
+    return alg
+
+
+def create_access_token(
+    subject: str, role: str, expires_minutes: int | None = None, token_version: int = 0,
+    extra: dict[str, Any] | None = None,
+) -> str:
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=expires_minutes or settings.jwt_expire_minutes)
+    payload: dict[str, Any] = {"sub": subject, "role": role, "exp": expire, "iat": now, "tv": token_version}
+    if extra:
+        payload.update(extra)
+    return jwt.encode(payload, settings.jwt_secret, algorithm=_alg())
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
     try:
-        return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    except JWTError as exc:  # pragma: no cover - exercised via API layer
+        return jwt.decode(
+            token, settings.jwt_secret, algorithms=[_alg()], options={"require": ["exp", "sub"]}
+        )
+    except jwt.PyJWTError as exc:  # pragma: no cover - exercised via API layer
         raise ValueError("invalid or expired token") from exc
 
 
@@ -100,3 +128,40 @@ def decrypt_embedding(blob: bytes) -> list[float]:
 
 def generate_master_key() -> str:  # pragma: no cover - operator convenience
     return base64.urlsafe_b64encode(os.urandom(32)).decode()
+
+
+# --- small secrets stored in the database (API keys, WhatsApp tokens) ----------
+_SECRET_PREFIX = "enc1:"
+
+
+def encrypt_text(value: str) -> str:
+    """Encrypt a short secret with the master key before it goes into the DB.
+    Empty stays empty. Already-encrypted values are returned unchanged."""
+    if not value or value.startswith(_SECRET_PREFIX):
+        return value
+    return _SECRET_PREFIX + _MasterKey.get().encrypt(value.encode()).decode()
+
+
+def decrypt_text(value: str | None) -> str:
+    """Inverse of encrypt_text. Plain (legacy, pre-encryption) values pass
+    through so old installs keep working until the value is saved again."""
+    if not value:
+        return ""
+    if not value.startswith(_SECRET_PREFIX):
+        return value
+    try:
+        return _MasterKey.get().decrypt(value[len(_SECRET_PREFIX):].encode()).decode()
+    except Exception:  # noqa: BLE001 - wrong key: behave as "not set", never crash
+        return ""
+
+
+def rewrap_embedding(blob: bytes, old_key: str, new_key: str) -> bytes:
+    """Master-key rotation: re-encrypt only the per-record DEK (envelope)."""
+    if blob[:3] != b"FE1":
+        raise ValueError("unrecognized embedding envelope format")
+    (wrapped_len,) = struct.unpack(">I", blob[3:7])
+    wrapped_dek = blob[7 : 7 + wrapped_len]
+    ciphertext = blob[7 + wrapped_len :]
+    dek = Fernet(old_key.encode()).decrypt(wrapped_dek)
+    new_wrapped = Fernet(new_key.encode()).encrypt(dek)
+    return b"FE1" + struct.pack(">I", len(new_wrapped)) + new_wrapped + ciphertext

@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.deps import http_error, require_admin
+from app.deps import http_error, require_hr
 from app.models.consents import Consent
 from app.models.employees import Employee
 from app.models.enums import OwnerType
@@ -29,8 +29,12 @@ from app.services.audit import write_audit
 from app.services.embedding import process_enrollment_image
 from app.services.ids import next_employee_face_id
 from app.services.media import save_face_crop
+from app.services.retention import delete_employee_photos
+from app.services.shiftday import LOCAL_TZ
 from app.services.roster import validate_assignment
 from app.services.settings_service import get_setting
+
+MAX_ENROLL_BYTES = 10 * 1024 * 1024  # 10 MB per photo
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
@@ -56,7 +60,7 @@ async def _get_employee_or_404(db: AsyncSession, employee_id: str) -> Employee:
 
 @router.post("", response_model=EmployeeOut, status_code=201)
 async def create_employee(
-    payload: EmployeeCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    payload: EmployeeCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> EmployeeOut:
     existing = await db.execute(select(Employee).where(Employee.emp_code == payload.emp_code))
     if existing.scalar_one_or_none() is not None:
@@ -89,7 +93,7 @@ async def list_employees(
     page: int = 1,
     page_size: int = Query(50, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
-    _user: User = Depends(require_admin),
+    _user: User = Depends(require_hr),
 ) -> EmployeeListResponse:
     stmt = select(Employee).where(Employee.deleted_at.is_(None))
     if department:
@@ -127,7 +131,7 @@ async def update_employee(
     employee_id: str,
     payload: EmployeeUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_admin),
+    user: User = Depends(require_hr),
 ) -> EmployeeOut:
     employee = await _get_employee_or_404(db, employee_id)
     changes = payload.model_dump(exclude_unset=True)
@@ -161,7 +165,7 @@ async def update_employee(
 
 @router.delete("/{employee_id}", status_code=204, response_model=None)
 async def delete_employee(
-    employee_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    employee_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> None:
     employee = await _get_employee_or_404(db, employee_id)
 
@@ -171,12 +175,19 @@ async def delete_employee(
     for template in templates_result.scalars().all():
         await db.delete(template)
 
+    # Consent records are KEPT (marked revoked): they are the proof that the
+    # face data was collected lawfully and has now been erased (DPDP).
+    now = datetime.now(timezone.utc)
     consents_result = await db.execute(select(Consent).where(Consent.employee_id == employee.id))
     for consent in consents_result.scalars().all():
-        await db.delete(consent)
+        if consent.revoked_at is None:
+            consent.revoked_at = now
 
     employee.is_active = False
-    employee.deleted_at = datetime.now(timezone.utc)
+    employee.deleted_at = now
+    if employee.date_of_leaving is None:
+        employee.date_of_leaving = now.astimezone(LOCAL_TZ).date()
+    delete_employee_photos(employee.id)
 
     await write_audit(db, user.id, "delete", "employee", employee.id, before={"name": employee.name}, after=None)
     await db.commit()
@@ -184,7 +195,7 @@ async def delete_employee(
 
 @router.post("/{employee_id}/consent", response_model=ConsentOut, status_code=201)
 async def grant_consent(
-    employee_id: str, payload: ConsentCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    employee_id: str, payload: ConsentCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> ConsentOut:
     employee = await _get_employee_or_404(db, employee_id)
     consent = Consent(
@@ -202,7 +213,7 @@ async def grant_consent(
 
 @router.delete("/{employee_id}/consent", status_code=204, response_model=None)
 async def revoke_consent(
-    employee_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    employee_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> None:
     employee = await _get_employee_or_404(db, employee_id)
     result = await db.execute(
@@ -238,7 +249,7 @@ async def enroll_employee(
     employee_id: str,
     files: list[UploadFile],
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_admin),
+    user: User = Depends(require_hr),
 ) -> EnrollResponse:
     employee = await _get_employee_or_404(db, employee_id)
 
@@ -258,7 +269,11 @@ async def enroll_employee(
     accepted_count = 0
 
     for upload in files:
-        image_bytes = await upload.read()
+        image_bytes = await upload.read(MAX_ENROLL_BYTES + 1)
+        if len(image_bytes) > MAX_ENROLL_BYTES:
+            results.append(EnrollImageResult(filename=upload.filename or "image", accepted=False,
+                                             reason="file_too_large", quality_score=0.0))
+            continue
         if existing_count + accepted_count >= MAX_TEMPLATES_PER_OWNER:
             results.append(
                 EnrollImageResult(filename=upload.filename or "image", accepted=False, reason="template_limit_reached", quality_score=0.0)
@@ -313,7 +328,7 @@ async def enroll_employee(
 
 @router.get("/{employee_id}/templates", response_model=list[FaceTemplateOut])
 async def list_templates(
-    employee_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_admin)
+    employee_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_hr)
 ) -> list[FaceTemplateOut]:
     await _get_employee_or_404(db, employee_id)
     result = await db.execute(
@@ -329,7 +344,7 @@ async def list_templates(
 
 @router.delete("/{employee_id}/templates/{template_id}", status_code=204, response_model=None)
 async def delete_template(
-    employee_id: str, template_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)
+    employee_id: str, template_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> None:
     await _get_employee_or_404(db, employee_id)
     result = await db.execute(

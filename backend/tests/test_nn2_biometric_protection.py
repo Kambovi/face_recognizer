@@ -74,8 +74,9 @@ async def test_employee_delete_hard_purges_templates_consent_and_audits(client, 
     ).scalars().all()
     assert templates == []
 
+    # consent records are kept as proof, but revoked
     consents = (await db_session.execute(select(Consent).where(Consent.employee_id == employee_id))).scalars().all()
-    assert consents == []
+    assert consents and all(c.revoked_at is not None for c in consents)
 
     audit_rows = (
         await db_session.execute(select(AuditLog).where(AuditLog.entity_id == employee_id, AuditLog.action == "delete"))

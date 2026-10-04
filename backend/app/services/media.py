@@ -46,12 +46,32 @@ def save_face_crop(image: np.ndarray, box: tuple[float, float, float, float], su
     return str(rel_path)
 
 
+class BadImage(ValueError):
+    pass
+
+
+def _safe_rel_dir(subdir: str) -> Path:
+    rel = Path(subdir)
+    if rel.is_absolute() or any(part in ("..", "") for part in rel.parts):
+        raise BadImage("bad media folder")
+    root = settings.media_root_path.resolve()
+    if not (root / rel).resolve().is_relative_to(root):
+        raise BadImage("bad media folder")
+    return rel
+
+
 def save_base64_jpeg(b64_data: str, subdir: str) -> str:
     """The kiosk already crops+encodes the best-shot to a 224x224 JPEG before
     posting it (it never sends a raw frame), so this just persists the bytes
-    -- no further cropping/resizing needed server-side."""
-    raw = base64.b64decode(b64_data)
-    rel_dir = Path(subdir)
+    -- no further cropping/resizing needed server-side. Only real JPEG bytes
+    are written, and only inside MEDIA_ROOT."""
+    try:
+        raw = base64.b64decode(b64_data, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise BadImage("crop is not base64") from exc
+    if len(raw) > 300_000 or not raw.startswith(b"\xff\xd8\xff"):
+        raise BadImage("crop is not a JPEG")
+    rel_dir = _safe_rel_dir(subdir)
     (settings.media_root_path / rel_dir).mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4()}.jpg"
     rel_path = rel_dir / filename
@@ -61,4 +81,9 @@ def save_base64_jpeg(b64_data: str, subdir: str) -> str:
 
 
 def absolute_path(rel_path: str) -> Path:
-    return settings.media_root_path / rel_path
+    """Stored relative path -> file path, never outside MEDIA_ROOT."""
+    root = settings.media_root_path.resolve()
+    p = (root / rel_path).resolve()
+    if not p.is_relative_to(root):
+        return root / "__outside_media_root__"  # .exists() is False -> 404
+    return p
