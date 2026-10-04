@@ -69,9 +69,24 @@ async def health(response: Response, db: AsyncSession = Depends(get_db)) -> dict
     return body
 
 
+async def tls_ask(domain: str = "") -> Response:
+    """Caddy on-demand TLS: may a certificate be issued for this host name?
+    Only for <active tenant>.<BASE_DOMAIN> (stops strangers making us
+    request certificates for random names)."""
+    from app.tenancy import slug_from_host, tenant_by_slug
+
+    s = get_settings()
+    if domain.lower().rstrip(".") == s.base_domain.lower():
+        return Response(status_code=200)
+    slug = slug_from_host(domain, s.base_domain)
+    t = await tenant_by_slug(slug) if slug else None
+    return Response(status_code=200 if t is not None and t.status != "deleted" else 404)
+
+
 from app.config import get_settings  # noqa: E402
 
 if get_settings().role == "cloud":
     router.add_api_route("/health", _cloud_health, methods=["GET"])
+    router.add_api_route("/health/tls-ask", tls_ask, methods=["GET"])
 else:
     router.add_api_route("/health", health, methods=["GET"])

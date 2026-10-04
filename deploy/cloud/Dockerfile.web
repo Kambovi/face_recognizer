@@ -1,0 +1,14 @@
+# Dashboard (React) built for same-origin API calls, served by Caddy with
+# automatic HTTPS for every <tenant>.<BASE_DOMAIN>.
+FROM node:20-slim AS build
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ .
+# empty = same origin (https://acme.example.in/api/v1)
+ENV VITE_API_BASE_URL=""
+RUN npm run build
+
+FROM caddy:2.8-alpine
+COPY --from=build /app/dist /srv
+COPY deploy/cloud/Caddyfile /etc/caddy/Caddyfile

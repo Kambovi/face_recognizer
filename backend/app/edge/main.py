@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings, insecure_settings
+from app.config import get_settings, insecure_settings, validate_for_production
 from app.db import get_db
 from app.deps import bearer_scheme, hash_device_token, http_error
 from app.edge import sync
@@ -41,6 +41,7 @@ from app.services.recognition import match_locally
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
+validate_for_production(settings)
 API = "/api/v1"
 _lock = asyncio.Lock()
 _wake = asyncio.Event()

@@ -1,0 +1,44 @@
+{
+	email {$ACME_EMAIL}
+	# a certificate is issued the first time a tenant's address is opened,
+	# only if the API says that tenant exists (no wildcard DNS plugin needed)
+	on_demand_tls {
+		ask http://api:8000/api/v1/health/tls-ask
+	}
+}
+
+{$BASE_DOMAIN}, *.{$BASE_DOMAIN} {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Content-Security-Policy "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+		-Server
+	}
+
+	# API + edge-box tunnel (WebSocket upgrade is handled automatically)
+	handle /api/* {
+		reverse_proxy api:8000 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# dashboard (single-page app)
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+	}
+
+	request_body {
+		max_size 64MB
+	}
+}

@@ -65,9 +65,30 @@ def saas(tmp_path):  # type: ignore[no-untyped-def]
         "PYTHONPATH": str(BACKEND), "APP_ENV": "development", "JWT_SECRET": "j" * 48,
         "PATH": os.environ.get("PATH", ""),
     }
+    # E2E_PG=postgresql+asyncpg://user:pw@host:port runs the cloud on Postgres
+    # (user needs CREATEDB; vector extension in template1), else SQLite files.
+    pg = os.environ.get("E2E_PG")
+    if pg:
+        import asyncio
+
+        import asyncpg
+
+        async def _reset() -> None:
+            from sqlalchemy.engine import make_url
+
+            u = make_url(pg)
+            c = await asyncpg.connect(user=u.username, password=u.password, host=u.host, port=u.port, database="postgres")
+            for db in ("fa_e2e_control", "fa_acme"):
+                await c.execute(f'DROP DATABASE IF EXISTS "{db}" WITH (FORCE)')
+            await c.execute('CREATE DATABASE "fa_e2e_control"')
+            await c.close()
+
+        asyncio.run(_reset())
+    control_url = f"{pg}/fa_e2e_control" if pg else f"sqlite+aiosqlite:///{tmp_path}/control.db"
+    tenant_tpl = f"{pg}/{{db}}" if pg else f"sqlite+aiosqlite:///{tmp_path}/{{db}}.db"
     cloud_env = {**common, "APP_ROLE": "cloud",
-                 "CONTROL_DATABASE_URL": f"sqlite+aiosqlite:///{tmp_path}/control.db",
-                 "TENANT_DATABASE_URL_TEMPLATE": f"sqlite+aiosqlite:///{tmp_path}/{{db}}.db",
+                 "CONTROL_DATABASE_URL": control_url,
+                 "TENANT_DATABASE_URL_TEMPLATE": tenant_tpl,
                  "DATABASE_URL": f"sqlite+aiosqlite:///{tmp_path}/unused.db",
                  "DATABASE_URL_SYNC": f"sqlite:///{tmp_path}/unused.db",
                  "LICENCE_PRIVATE_KEY": priv, "KIOSK_SERVICE_TOKEN": "",
@@ -99,7 +120,9 @@ def saas(tmp_path):  # type: ignore[no-untyped-def]
     ]
     try:
         yield {"cloud": f"http://127.0.0.1:{cport}", "edge": f"http://127.0.0.1:{eport}", "pw": temp_pw,
-               "tmp": tmp_path, "cloud_env": cloud_env}
+               "tmp": tmp_path, "cloud_env": cloud_env,
+               "tenant_sync_url": (tenant_tpl.replace("{db}", "fa_acme").replace("+asyncpg", "+psycopg2")
+                                   .replace("+aiosqlite", ""))}
     finally:
         for p in procs:
             p.terminate()
@@ -178,9 +201,13 @@ def test_cloud_and_edge_box_end_to_end(saas):  # type: ignore[no-untyped-def]
     assert "12 casual leave" in ans["text"]
 
     # nothing biometric in the cloud
-    tdb = sqlite3.connect(tmp / "fa_acme.db")
-    assert tdb.execute("SELECT COUNT(*) FROM face_templates").fetchone()[0] == 0
-    tdb.close()
+    import sqlalchemy as sa
+
+    eng = sa.create_engine(saas["tenant_sync_url"])
+    with eng.connect() as c:
+        assert c.execute(sa.text("SELECT COUNT(*) FROM face_templates")).scalar() == 0
+        assert c.execute(sa.text("SELECT COUNT(*) FROM attendance_events")).scalar() == 2
+    eng.dispose()
     assert not any((tmp / "cloud_media").rglob("*.jpg"))
 
     # delete on the cloud erases the face data on the box

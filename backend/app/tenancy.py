@@ -138,6 +138,11 @@ def _info(t: Tenant) -> TenantInfo:
 _cache: dict[str, tuple[float, TenantInfo | None]] = {}
 CACHE_SECONDS = 30.0
 _engines: dict[str, tuple[AsyncEngine, async_sessionmaker[AsyncSession]]] = {}
+_last_used: dict[str, float] = {}
+# Small pools per tenant (most tenants are idle most of the time); idle
+# tenants' connections are closed after IDLE_ENGINE_SECONDS. With many
+# tenants put PgBouncer (transaction mode) in front of Postgres.
+POOL_SIZE, POOL_OVERFLOW, IDLE_ENGINE_SECONDS = 2, 4, 900
 
 
 def forget_tenant(slug: str) -> None:
@@ -166,11 +171,25 @@ async def all_tenants(active_only: bool = True) -> list[TenantInfo]:
 def sessions_for(tenant: TenantInfo) -> async_sessionmaker[AsyncSession]:
     hit = _engines.get(tenant.slug)
     if hit is None or str(hit[0].url) != str(sa.engine.make_url(tenant.db_url)):
-        engine = create_async_engine(tenant.db_url, pool_pre_ping=True, pool_size=5, max_overflow=5) \
-            if tenant.db_url.startswith("postgresql") else create_async_engine(tenant.db_url)
+        if tenant.db_url.startswith("postgresql"):
+            engine = create_async_engine(tenant.db_url, pool_pre_ping=True, pool_size=POOL_SIZE,
+                                         max_overflow=POOL_OVERFLOW, pool_timeout=15, pool_recycle=1800)
+        else:
+            engine = create_async_engine(tenant.db_url)
         hit = (engine, async_sessionmaker(engine, expire_on_commit=False, autoflush=False))
         _engines[tenant.slug] = hit
+    _last_used[tenant.slug] = time.monotonic()
     return hit[1]
+
+
+async def close_idle_engines() -> int:
+    now = time.monotonic()
+    idle = [slug for slug, t in _last_used.items() if now - t > IDLE_ENGINE_SECONDS and slug in _engines]
+    for slug in idle:
+        engine, _ = _engines.pop(slug)
+        _last_used.pop(slug, None)
+        await engine.dispose()
+    return len(idle)
 
 
 async def dispose_engines() -> None:
@@ -274,12 +293,27 @@ async def tenant_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+_bg: dict[str, async_sessionmaker[AsyncSession]] = {}
+
+
+def background_sessions(tenant: TenantInfo) -> async_sessionmaker[AsyncSession]:
+    """Sessions for background jobs: no pooled connections kept open (a
+    once-a-minute check on 300 idle tenants must not hold 300 connections)."""
+    from sqlalchemy.pool import NullPool
+
+    hit = _bg.get(tenant.slug)
+    if hit is None:
+        hit = async_sessionmaker(create_async_engine(tenant.db_url, poolclass=NullPool), expire_on_commit=False)
+        _bg[tenant.slug] = hit
+    return hit
+
+
 async def for_each_tenant(job: Callable[[AsyncSession], Awaitable[Any]], name: str) -> None:
     """Run a background job on every active tenant's database."""
     for t in await all_tenants():
         token = current_tenant.set(t)
         try:
-            async with sessions_for(t)() as db:
+            async with background_sessions(t)() as db:
                 await job(db)
         except Exception as exc:  # noqa: BLE001 - one tenant must not stop the others
             logger.warning("tenant_job_failed", job=name, tenant=t.slug, error=str(exc)[:200])

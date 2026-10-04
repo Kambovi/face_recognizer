@@ -1,0 +1,41 @@
+# EDGE BOX at the client's site (Linux mini-PC / NUC): the edge API + one
+# kiosk process per camera. Faces, photos and policy documents stay here.
+#
+#   cp .env.edge.example .env     # CLOUD_URL, EDGE_SITE_TOKEN, LICENCE_PUBLIC_KEY ...
+#   docker compose up -d --build
+#   curl http://localhost:8000/api/v1/edge/status
+services:
+  edge:
+    build:
+      context: ../../backend
+      target: base
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ROLE: edge
+      APP_ENV: production
+      DATABASE_URL: sqlite+aiosqlite:////data/edge.db
+      DATABASE_URL_SYNC: sqlite:////data/edge.db
+      MEDIA_ROOT: /data/media
+      POLICY_DIR: /data/policy
+    command: uvicorn app.edge.main:app --host 0.0.0.0 --port 8000 --workers 1
+    volumes:
+      - ./data:/data          # BACK THIS UP (USB / NAS): face templates live only here
+    ports:
+      - "8000:8000"          # LAN only -- do not forward this port on the router
+
+  kiosk-gate:
+    build:
+      context: ../../kiosk
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      - edge
+    environment:
+      API_BASE_URL: http://edge:8000
+      KIOSK_ID: main-gate
+      KIOSK_SERVICE_TOKEN: ${CAMERA_TOKEN_MAIN_GATE}   # from cloud Admin -> Cameras
+      CAMERA_SOURCE: ${CAMERA_RTSP_MAIN_GATE}         # rtsp://user:pass@192.168.1.64:554/Streaming/Channels/101
+      DEVICE_PREFERENCE: auto
+    volumes:
+      - ./models:/models

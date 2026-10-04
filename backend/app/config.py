@@ -122,8 +122,8 @@ INSECURE_DEFAULTS = {
 def insecure_settings(s: Settings) -> list[str]:
     """Names of secrets that are missing, published defaults or too short."""
     problems: list[str] = []
-    if s.jwt_secret in INSECURE_DEFAULTS or len(s.jwt_secret) < 32:
-        problems.append("JWT_SECRET")
+    if s.role != "edge" and (s.jwt_secret in INSECURE_DEFAULTS or len(s.jwt_secret) < 32):
+        problems.append("JWT_SECRET")  # the edge box has no logins
     if s.embedding_encryption_key in INSECURE_DEFAULTS:
         problems.append("EMBEDDING_ENCRYPTION_KEY")
     if s.kiosk_service_token and (s.kiosk_service_token in INSECURE_DEFAULTS or len(s.kiosk_service_token) < 24):

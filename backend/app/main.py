@@ -71,8 +71,11 @@ async def _cloud_loop() -> None:  # pragma: no cover - timing loop
     from app.services.notify import run_schedules
     from app.tenancy import for_each_tenant
 
+    from app.tenancy import close_idle_engines
+
     while True:
         await for_each_tenant(run_schedules, "notify_schedules")
+        await close_idle_engines()
         await asyncio.sleep(60)
 
 
