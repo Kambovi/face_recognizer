@@ -107,6 +107,13 @@ async def edge_results(payload: ResultsIn, request: Request, authorization: str 
                     await db.rollback()
                     failed[cid] = str(exc)[:200]
                     logger.warning("edge_result_failed", tenant=tenant.slug, client_event_id=cid, error=str(exc)[:200])
+            # "last seen" on Admin -> Cameras: the box talks to the cameras, not the cloud
+            seen = {str(x.get("kiosk_id", ""))[:64] for x in payload.results} | {
+                str(x.get("kiosk_id", ""))[:64] for x in payload.heartbeats}
+            if seen:
+                now = datetime.now(timezone.utc)
+                for dev in (await db.execute(select(KioskDevice).where(KioskDevice.kiosk_id.in_(seen)))).scalars().all():
+                    dev.last_used_at = now
             for hb in payload.heartbeats:
                 kid = str(hb.get("kiosk_id", ""))[:64]
                 if not kid:

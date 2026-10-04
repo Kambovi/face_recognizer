@@ -4,7 +4,7 @@ numpy==1.26.4
 pillow==12.3.0
 opencv-python-headless==4.10.0.84
 insightface==0.7.3
-onnx==1.17.0
+onnx==1.23.1
 aiosqlite==0.20.0
 pydantic==2.13.5
 pydantic-settings==2.15.0
