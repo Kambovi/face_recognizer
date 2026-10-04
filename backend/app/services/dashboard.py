@@ -187,6 +187,11 @@ def _kiosks(events: list[AttendanceEvent]) -> list[str]:
 async def _employee_thumbs(db: AsyncSession) -> dict[str, str]:
     """employee id -> primary (else newest) template image URL, in one query.
     Selects only the columns needed -- never the embedding blobs."""
+    from app.services.biometrics import cloud
+
+    if cloud():  # templates are on the edge box; the cloud knows who has any
+        rows_c = await db.execute(select(Employee.id).where(Employee.face_count > 0))
+        return {eid: f"/api/v1/media/employee/{eid}" for (eid,) in rows_c.all()}
     rows = await db.execute(
         select(FaceTemplate.id, FaceTemplate.owner_id, FaceTemplate.source_image_path)
         .where(FaceTemplate.owner_type == OwnerType.EMPLOYEE)

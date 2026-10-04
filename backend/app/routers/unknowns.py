@@ -23,6 +23,7 @@ from app.schemas.unknowns import (
     UnknownListResponse,
     UnknownUpdateRequest,
 )
+from app.services import biometrics
 from app.services.audit import write_audit
 from app.services.roster import validate_assignment
 from app.services.settings_service import DEFAULT_SETTINGS, get_setting
@@ -82,15 +83,12 @@ async def list_unknown_templates(
     services/unknown_identity.split_unknown, which already takes explicit
     template_ids and therefore always needed a way to list them first)."""
     await _get_unknown_or_404(db, unknown_id)
-    result = await db.execute(
-        select(FaceTemplate).where(FaceTemplate.owner_type == OwnerType.UNKNOWN, FaceTemplate.owner_id == unknown_id)
-    )
-    out = []
-    for t in result.scalars().all():
-        item = FaceTemplateOut.model_validate(t)
-        item.crop_url = f"/api/v1/media/template/{t.id}" if t.source_image_path else None
-        out.append(item)
-    return out
+    return [
+        FaceTemplateOut(id=t["id"], quality_score=t["quality_score"], model_version=t["model_version"],
+                        created_at=t["created_at"], is_primary=t["is_primary"],
+                        crop_url=f"/api/v1/media/template/{t['id']}" if t.get("has_image") else None)
+        for t in await biometrics.list_templates(db, OwnerType.UNKNOWN, unknown_id)
+    ]
 
 
 @router.patch("/{unknown_id}", response_model=UnknownIdentityOut)
@@ -118,9 +116,9 @@ async def delete_unknown(
 ) -> None:
     from app.models.attendance_events import AttendanceEvent
     from app.models.enums import OwnerType
-    from app.models.face_templates import FaceTemplate
 
     unknown = await _get_unknown_or_404(db, unknown_id)
+    await biometrics.delete_unknown(db, unknown.id)  # cloud: templates + photos on the edge box
 
     for model, col in ((FaceTemplate, FaceTemplate.owner_id), (AttendanceEvent, AttendanceEvent.unknown_identity_id)):
         if model is FaceTemplate:
@@ -148,6 +146,8 @@ async def link_unknown(
     min_q = float(await get_setting(db, "quality_min_score") or DEFAULT_SETTINGS["quality_min_score"])
     await link_unknown_to_employee(db, unknown, employee, payload.reason, payload.adopt_templates, user.email,
                                    min_template_quality=min_q)
+    if payload.adopt_templates:  # cloud: move the templates on the edge box (standalone: done above)
+        await biometrics.adopt_unknown(db, unknown.id, employee.id, min_quality=min_q, capacity=None, delete_rest=False)
     await write_audit(
         db, user.id, "link", "unknown_identity", unknown.id,
         after={"employee_id": employee.id, "adopt_templates": payload.adopt_templates, "reason": payload.reason},
@@ -169,12 +169,14 @@ async def promote_unknown(
         raise http_error(409, "emp_code_taken", f"ID '{payload.emp_code}' is already used by someone else")
     await validate_assignment(db, department=payload.department, home_kiosk_id=payload.home_kiosk_id)
 
+    min_q = float(await get_setting(db, "quality_min_score") or DEFAULT_SETTINGS["quality_min_score"])
     employee = await promote_unknown_to_employee(
         db, unknown, payload.name, payload.emp_code, payload.department, payload.designation, payload.shift_id, user.email,
         home_kiosk_id=payload.home_kiosk_id,
         contractor=payload.contractor,
-        min_template_quality=float(await get_setting(db, "quality_min_score") or DEFAULT_SETTINGS["quality_min_score"]),
+        min_template_quality=min_q,
     )
+    await biometrics.adopt_unknown(db, unknown.id, employee.id, min_quality=min_q, capacity=None, delete_rest=True)
     db.add(
         Consent(
             employee_id=employee.id,
@@ -193,10 +195,26 @@ async def split_unknown_endpoint(
     unknown_id: str, payload: SplitRequest, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> SplitResponse:
     unknown = await _get_unknown_or_404(db, unknown_id)
-    try:
-        new_unknown = await split_unknown(db, unknown, payload.template_ids, payload.reason, user.email)
-    except ValueError as exc:
-        raise http_error(422, "no_matching_templates", str(exc)) from exc
+    if biometrics.cloud():
+        # the templates are on the edge box: new identity here, move them there
+        from datetime import datetime, timezone
+
+        from app.services.ids import next_unknown_face_id
+
+        now = datetime.now(timezone.utc)
+        new_unknown = UnknownIdentity(face_id=await next_unknown_face_id(db), first_seen_at=now, last_seen_at=now,
+                                      sighting_count=len(payload.template_ids), status=UnknownStatus.OPEN,
+                                      notes=f"Split from {unknown.face_id}: {payload.reason}")
+        db.add(new_unknown)
+        await db.flush()
+        if not await biometrics.split_unknown(unknown.id, payload.template_ids, new_unknown.id):
+            await db.rollback()
+            raise http_error(422, "no_matching_templates", "None of those templates belong to this unknown person")
+    else:
+        try:
+            new_unknown = await split_unknown(db, unknown, payload.template_ids, payload.reason, user.email)
+        except ValueError as exc:
+            raise http_error(422, "no_matching_templates", str(exc)) from exc
 
     await write_audit(db, user.id, "split", "unknown_identity", unknown.id, after={"new_unknown_id": new_unknown.id, "reason": payload.reason})
     await db.commit()

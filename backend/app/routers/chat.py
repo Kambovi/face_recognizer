@@ -23,7 +23,7 @@ from app.deps import can_see_salary, get_current_user, http_error, require_admin
 from app.models.users import User
 from app.services.audit import write_audit
 from app.services.chatbot import engine, llm
-from app.services.chatbot.policy import get_index
+from app.services import biometrics
 from app.services.client_profile import get_profile
 
 router = APIRouter(prefix="/chat", tags=["chatbot"])
@@ -65,7 +65,7 @@ class ChatConfigIn(BaseModel):
 @router.get("/status")
 async def chat_status(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
     cfg = await engine.get_config(db)
-    idx = get_index().status()
+    idx = await biometrics.policy_status()
     return {
         "enabled": bool(cfg.get("enabled", True)),
         "mode": engine.mode_of(cfg),
@@ -106,7 +106,7 @@ async def chat(payload: ChatIn, db: AsyncSession = Depends(get_db), user: User =
 @router.get("/config")
 async def read_config(db: AsyncSession = Depends(get_db), _user: User = Depends(require_admin)) -> dict[str, Any]:
     cfg = engine.public_config(await engine.get_config(db))
-    cfg["policy"] = get_index().status()
+    cfg["policy"] = await biometrics.policy_status()
     return cfg
 
 
@@ -122,15 +122,13 @@ async def update_config(payload: ChatConfigIn, db: AsyncSession = Depends(get_db
                       after={k: v for k, v in data.items() if k != "api_key"})
     await db.commit()
     out = engine.public_config(cfg)
-    out["policy"] = get_index().status()
+    out["policy"] = await biometrics.policy_status()
     return out
 
 
 @router.post("/reindex")
 async def reindex(_user: User = Depends(require_admin)) -> dict[str, Any]:
-    idx = get_index()
-    idx.refresh(force=True)
-    return idx.status()
+    return await biometrics.policy_reindex()
 
 
 @router.post("/test")

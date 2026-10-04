@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.settings import Setting
 from app.security import decrypt_text, encrypt_text
 from app.services.chatbot import llm
-from app.services.chatbot.policy import get_index
+from app.services import biometrics
 from app.services.chatbot.report import build_detection_report, build_report, parse_date, parse_month, today
 from app.services.chatbot.targets import find_targets
 
@@ -225,14 +225,14 @@ async def basic_answer(db: AsyncSession, message: str, notice: str | None = None
         strong = found["candidates"][0]["score"] >= 80
         if wants_data or strong:
             return _reply(_found_text(found), choices=_choices_from(found, month, extra), notice=notice)
-    hits = get_index().search(message, k=3)
+    hits = await biometrics.policy_search(message, k=3)
     if hits:
         best = [h for h in hits if h["score"] >= 0.7 * hits[0]["score"]][:2]
         text = "Company policy me ye mila:\n\n" + "\n\n".join(_plain(h["text"])[:800] for h in best)
         return _reply(text, sources=_sources(best), notice=notice)
     if found is not None and wants_data:
         return _reply(_found_text(found), notice=notice)
-    if not get_index().chunks:
+    if not (await biometrics.policy_status()).get("chunks"):
         return _reply("Policy documents abhi add nahi hue. Kisi employee ka naam ya ID likhein, uska attendance/payroll "
                       "summary dikha dunga.", notice=notice)
     return _reply("Iska jawab policy me nahi mila. Kisi employee / department ka naam ya ID likhein, ya sawaal alag "
@@ -281,7 +281,7 @@ async def llm_answer(
             msgs.append({"role": "assistant", "content": out.text, "tool_calls": out.tool_calls})
             for tc in out.tool_calls:
                 if tc.name == "search_policy":
-                    hits = get_index().search(str(tc.args.get("query", "")), k=4)
+                    hits = await biometrics.policy_search(str(tc.args.get("query", "")), k=4)
                     sources.extend(_sources(hits))
                     result: Any = [{"file": h["source"], "text": h["text"]} for h in hits] or "No matching policy text."
                 elif tc.name == "find_people":

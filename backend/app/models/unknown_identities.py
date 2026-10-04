@@ -34,6 +34,9 @@ class UnknownIdentity(Base):
     resolved_by: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     notes: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    # camera of the latest sighting: "seen here a moment ago" prior when
+    # clustering (services/unknown_identity.py)
+    last_kiosk_id: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
     # Set = watchlisted face: every sighting raises an alert.
     watchlist_reason: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
 

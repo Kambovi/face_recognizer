@@ -80,14 +80,11 @@ async def _recent_same_camera_match(
         return None
     since = occurred_at - timedelta(seconds=window_seconds)
     rows = await db.execute(
-        select(AttendanceEvent.unknown_identity_id)
-        .where(
-            AttendanceEvent.kiosk_id == kiosk_id,
-            AttendanceEvent.unknown_identity_id.is_not(None),
-            AttendanceEvent.occurred_at >= since,
-            AttendanceEvent.occurred_at <= occurred_at,
+        select(UnknownIdentity.id).where(
+            UnknownIdentity.last_kiosk_id == kiosk_id,
+            UnknownIdentity.last_seen_at >= since,
+            UnknownIdentity.last_seen_at <= occurred_at,
         )
-        .distinct()
     )
     recent_ids = [r for (r,) in rows.all() if r]
     best: tuple[str, float] | None = None
@@ -134,7 +131,9 @@ async def cluster_or_create_unknown(
         best_existing_quality = max((t.quality_score for t in existing_templates), default=-1.0)
 
         unknown.sighting_count += 1
-        unknown.last_seen_at = occurred_at
+        if occurred_at >= unknown.last_seen_at:
+            unknown.last_seen_at = occurred_at
+            unknown.last_kiosk_id = kiosk_id
         if crop_path and quality_score > best_existing_quality:
             unknown.best_crop_path = crop_path
 
@@ -165,6 +164,7 @@ async def cluster_or_create_unknown(
         sighting_count=1,
         best_crop_path=crop_path,
         status=UnknownStatus.OPEN,
+        last_kiosk_id=kiosk_id,
     )
     db.add(unknown)
     await db.flush()

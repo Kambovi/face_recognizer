@@ -54,7 +54,9 @@ def policy(tmp_path, monkeypatch):
     d.add_paragraph("Salary is paid on the 7th of every month by bank transfer.")
     d.save(tmp_path / "salary.docx")
     idx = PolicyIndex(tmp_path)
-    monkeypatch.setattr(engine, "get_index", lambda: idx)
+    from app.services.chatbot import policy
+
+    monkeypatch.setattr(policy, "get_index", lambda: idx)
     return idx
 
 

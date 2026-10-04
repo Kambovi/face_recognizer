@@ -14,7 +14,22 @@ router = APIRouter(tags=["health"])
 HEARTBEAT_STALE_AFTER = timedelta(minutes=5)
 
 
-@router.get("/health")
+async def _cloud_health() -> dict:
+    """SaaS cloud: no tenant on this path -- report the control database
+    and how many edge boxes are connected."""
+    from app.edge_hub import hub
+    from app.tenancy import control_sessions
+
+    status = "ok"
+    try:
+        async with control_sessions()() as db:
+            await db.execute(text("SELECT 1"))
+    except Exception:  # noqa: BLE001
+        status = "degraded"
+    return {"status": status, "role": "cloud", "edges_online": len(hub.conns),
+            "time": datetime.now(timezone.utc).isoformat()}
+
+
 async def health(response: Response, db: AsyncSession = Depends(get_db)) -> dict:
     db_status = "ok"
     try:
@@ -52,3 +67,11 @@ async def health(response: Response, db: AsyncSession = Depends(get_db)) -> dict
     if overall_status != "ok":
         response.status_code = 200  # still 200 -- degraded is a valid, non-error health state
     return body
+
+
+from app.config import get_settings  # noqa: E402
+
+if get_settings().role == "cloud":
+    router.add_api_route("/health", _cloud_health, methods=["GET"])
+else:
+    router.add_api_route("/health", health, methods=["GET"])

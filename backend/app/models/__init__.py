@@ -5,6 +5,7 @@ from app.models.alerts import Alert  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.attendance_events import AttendanceEvent  # noqa: F401
 from app.models.consents import Consent  # noqa: F401
+from app.models.edge import EdgeDetection, EdgeOutbox  # noqa: F401
 from app.models.employees import Employee  # noqa: F401
 from app.models.face_templates import FaceTemplate  # noqa: F401
 from app.models.holidays import Holiday  # noqa: F401
@@ -26,6 +27,8 @@ __all__ = [
     "AuditLog",
     "AttendanceEvent",
     "Consent",
+    "EdgeDetection",
+    "EdgeOutbox",
     "Employee",
     "FaceTemplate",
     "Holiday",

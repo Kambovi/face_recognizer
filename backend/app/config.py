@@ -55,11 +55,35 @@ class Settings(BaseSettings):
     # served from the same host via the reverse proxy). "*" only in development.
     cors_origins: str = ""
 
+    # --- SaaS (see app/tenancy.py, docs/SAAS_ARCHITECTURE.md) ---
+    # standalone = one client, everything on one machine (default, as before)
+    # cloud      = the hosted service: many clients, one database each, no faces
+    # edge       = the box at a client site: cameras, faces, photos, policy docs
+    app_role: str = "standalone"
+    # cloud: database that lists the tenants (clients) and their edge boxes
+    control_database_url: str = "sqlite+aiosqlite:///./control.db"
+    # cloud: dashboards live at <slug>.<base_domain>, e.g. acme.attendance.example.in
+    base_domain: str = "localhost"
+    # cloud: new tenant database URL; {db} is replaced by "fa_<slug>"
+    tenant_database_url_template: str = "sqlite+aiosqlite:///./tenant_{db}.db"
+    # cloud: Ed25519 private key (base64) that signs edge licences
+    licence_private_key: str = ""
+    # edge: where the cloud is, and this site's token (from scripts/tenants.py)
+    cloud_url: str = ""
+    edge_site_token: str = ""
+    # edge: the cloud's licence public key (base64), baked in at build time
+    licence_public_key: str = ""
+
     # --- Environment ---
     # "development" (laptop / tests) or "production" (any real client). In
     # production the API REFUSES TO START with the published default secrets
     # (see validate_for_production) and hides /docs.
     app_env: str = "development"
+
+    @property
+    def role(self) -> str:
+        r = self.app_role.strip().lower()
+        return r if r in ("standalone", "cloud", "edge") else "standalone"
 
     @property
     def is_production(self) -> bool:
@@ -108,6 +132,13 @@ def insecure_settings(s: Settings) -> list[str]:
         if marker in s.database_url:
             problems.append("DATABASE_URL (default password)")
             break
+    if s.role == "cloud":
+        if not s.licence_private_key:
+            problems.append("LICENCE_PRIVATE_KEY")
+        if any(m in s.control_database_url + s.tenant_database_url_template for m in INSECURE_DEFAULTS):
+            problems.append("CONTROL_DATABASE_URL / TENANT_DATABASE_URL_TEMPLATE (default password)")
+    if s.role == "edge" and (not s.cloud_url or not s.edge_site_token or not s.licence_public_key):
+        problems.append("CLOUD_URL / EDGE_SITE_TOKEN / LICENCE_PUBLIC_KEY")
     return problems
 
 

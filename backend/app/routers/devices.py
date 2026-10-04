@@ -24,6 +24,7 @@ from app.db import get_db
 from app.deps import hash_device_token, http_error, require_admin
 from app.models.kiosk_devices import KIOSK_ID_PATTERN, KioskDevice
 from app.models.users import User
+from app.services import biometrics
 from app.services.audit import write_audit
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -58,12 +59,22 @@ async def list_devices(db: AsyncSession = Depends(get_db), _a: User = Depends(re
 async def add_device(payload: DeviceIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)) -> dict[str, Any]:
     if (await db.execute(select(KioskDevice).where(KioskDevice.kiosk_id == payload.kiosk_id))).scalar_one_or_none():
         raise http_error(409, "exists", "This camera ID is already registered -- rotate its token instead")
+    if biometrics.cloud():  # SaaS plan limit
+        from sqlalchemy import func
+
+        from app.tenancy import current_tenant
+
+        t = current_tenant.get()
+        n = int((await db.execute(select(func.count()).select_from(KioskDevice))).scalar_one())
+        if t is not None and n >= t.max_cameras:
+            raise http_error(402, "camera_limit", f"Your plan allows {t.max_cameras} camera(s). Contact your provider to add more.")
     token, digest = _new_token()
     d = KioskDevice(kiosk_id=payload.kiosk_id, name=payload.name, token_hash=digest)
     db.add(d)
     await db.flush()
     await write_audit(db, admin.id, "device_add", "camera", payload.kiosk_id)
     await db.commit()
+    biometrics.config_changed()
     return {**_out(d), "token": token}
 
 
@@ -80,6 +91,7 @@ async def rotate(device_id: str, db: AsyncSession = Depends(get_db), admin: User
     token, d.token_hash = _new_token()
     await write_audit(db, admin.id, "device_rotate", "camera", d.kiosk_id)
     await db.commit()
+    biometrics.config_changed()
     return {**_out(d), "token": token}
 
 
@@ -93,6 +105,7 @@ async def update(device_id: str, payload: DevicePatch, db: AsyncSession = Depend
         d.enabled = payload.enabled
     await write_audit(db, admin.id, "device_update", "camera", d.kiosk_id, after=payload.model_dump(exclude_unset=True))
     await db.commit()
+    biometrics.config_changed()
     return _out(d)
 
 
@@ -102,3 +115,4 @@ async def delete(device_id: str, db: AsyncSession = Depends(get_db), admin: User
     await write_audit(db, admin.id, "device_delete", "camera", d.kiosk_id)
     await db.delete(d)
     await db.commit()
+    biometrics.config_changed()

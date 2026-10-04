@@ -28,9 +28,10 @@ from app.services.shiftday import LOCAL_TZ
 logger = structlog.get_logger(__name__)
 
 
-async def purge_old_crops(db: AsyncSession, today: date | None = None) -> dict[str, int]:
-    cfg = await get_all_settings(db)
-    days = int(cfg.get("crop_retention_days") or 0)
+async def purge_old_crops(db: AsyncSession, today: date | None = None, days: int | None = None) -> dict[str, int]:
+    if days is None:
+        cfg = await get_all_settings(db)
+        days = int(cfg.get("crop_retention_days") or 0)
     if days <= 0:
         return {"files": 0, "folders": 0}
     today = today or datetime.now(LOCAL_TZ).date()

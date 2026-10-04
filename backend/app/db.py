@@ -41,6 +41,13 @@ class Base(DeclarativeBase):
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    if settings.role == "cloud":
+        # SaaS: the request's tenant database (app/tenancy.py)
+        from app.tenancy import tenant_session
+
+        async for session in tenant_session():
+            yield session
+        return
     async with AsyncSessionLocal() as session:
         yield session
 

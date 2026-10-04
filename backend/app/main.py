@@ -63,36 +63,66 @@ def _migrate_to_head() -> None:
     command.upgrade(cfg, "head")
 
 
+async def _cloud_loop() -> None:  # pragma: no cover - timing loop
+    """SaaS: the per-tenant schedules (daily / monthly WhatsApp summaries).
+    Photo retention runs on each client's edge box, not here."""
+    import asyncio
+
+    from app.services.notify import run_schedules
+    from app.tenancy import for_each_tenant
+
+    while True:
+        await for_each_tenant(run_schedules, "notify_schedules")
+        await asyncio.sleep(60)
+
+
+async def _migrate_all_tenants() -> None:
+    import asyncio
+
+    from app.tenancy import all_tenants, migrate_tenant_db
+
+    for t in await all_tenants(active_only=False):
+        try:
+            await asyncio.to_thread(migrate_tenant_db, t.db_url)
+        except Exception as exc:  # noqa: BLE001 - one broken tenant must not stop the rest
+            logger.error("tenant_migration_failed", tenant=t.slug, error=str(exc)[:300])
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    logger.info("api_startup", database=settings.database_url.split("@")[-1], env=settings.app_env)
+    import asyncio
+
+    logger.info("api_startup", role=settings.role, database=settings.database_url.split("@")[-1], env=settings.app_env)
     weak = insecure_settings(settings)
     if weak:
         logger.warning("INSECURE_SECRETS", secrets=weak,
                        fix="python scripts/gen_secrets.py --write  (required before going live)")
-    if ":memory:" not in settings.database_url:
-        import asyncio
+    tasks: list[asyncio.Task] = []
+    if settings.role == "cloud":
+        from app.tenancy import dispose_engines, init_control_db
 
+        await init_control_db()
+        await _migrate_all_tenants()
+        tasks.append(asyncio.create_task(_cloud_loop()))
+    elif ":memory:" not in settings.database_url:
         try:
             await asyncio.to_thread(_migrate_to_head)
             logger.info("migrations_applied")
         except Exception as exc:  # noqa: BLE001 - surface clearly, keep serving
             logger.error("migration_failed", error=str(exc)[:300])
-    push_task = None
-    if ":memory:" not in settings.database_url:
-        import asyncio
 
         from app.db import AsyncSessionLocal
         from app.services.multisite import push_loop
         from app.services.notify import schedule_loop
         from app.services.retention import retention_loop
 
-        push_task = asyncio.gather(
-            push_loop(AsyncSessionLocal), schedule_loop(AsyncSessionLocal), retention_loop(AsyncSessionLocal)
-        )
+        for loop in (push_loop, schedule_loop, retention_loop):
+            tasks.append(asyncio.create_task(loop(AsyncSessionLocal)))
     yield
-    if push_task is not None:
-        push_task.cancel()
+    for t in tasks:
+        t.cancel()
+    if settings.role == "cloud":
+        await dispose_engines()
 
 
 app = FastAPI(
@@ -114,6 +144,11 @@ if settings.cors_origin_list:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type", "X-Site-Token"],
     )
+
+
+from app.tenancy import TenantMiddleware  # noqa: E402
+
+app.add_middleware(TenantMiddleware)  # no-op unless APP_ROLE=cloud
 
 
 @app.middleware("http")
@@ -171,4 +206,8 @@ app.include_router(leaves.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(devices.router, prefix=API_PREFIX)
 app.include_router(holidays.router, prefix=API_PREFIX)
+if settings.role == "cloud":
+    from app.routers import edge as edge_router
+
+    app.include_router(edge_router.router, prefix=API_PREFIX)
 app.include_router(payroll.router, prefix=API_PREFIX)

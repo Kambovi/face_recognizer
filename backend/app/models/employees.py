@@ -45,6 +45,9 @@ class Employee(Base):
     # (services/payroll.py). Only admins ever see it. None = not set.
     monthly_salary: Mapped[float | None] = mapped_column(sa.Numeric(12, 2), nullable=True)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+    # SaaS cloud: number of face templates held on the client's edge box
+    # (the cloud never stores them). Standalone counts face_templates instead.
+    face_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0, server_default="0")
     # Payroll proration: days before joining / after leaving are not paid and
     # not counted as absent. None = not entered (falls back to created_at).
     date_of_joining: Mapped[dt.date | None] = mapped_column(sa.Date(), nullable=True)

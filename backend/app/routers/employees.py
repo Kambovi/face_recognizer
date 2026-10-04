@@ -11,7 +11,6 @@ from app.deps import http_error, require_hr
 from app.models.consents import Consent
 from app.models.employees import Employee
 from app.models.enums import OwnerType
-from app.models.face_templates import FaceTemplate
 from app.models.users import User
 from app.schemas.employees import (
     ConsentCreate,
@@ -24,30 +23,22 @@ from app.schemas.employees import (
     EnrollResponse,
     FaceTemplateOut,
 )
-from app.security import encrypt_embedding
+from app.services import biometrics
 from app.services.audit import write_audit
-from app.services.embedding import process_enrollment_image
+from app.services.face_store import MAX_ENROLL_BYTES
 from app.services.ids import next_employee_face_id
-from app.services.media import save_face_crop
-from app.services.retention import delete_employee_photos
 from app.services.shiftday import LOCAL_TZ
 from app.services.roster import validate_assignment
 from app.services.settings_service import get_setting
 
-MAX_ENROLL_BYTES = 10 * 1024 * 1024  # 10 MB per photo
-
 router = APIRouter(prefix="/employees", tags=["employees"])
 
-MAX_TEMPLATES_PER_OWNER = 5
 
 
-async def _template_count(db: AsyncSession, employee_id: str) -> int:
-    result = await db.execute(
-        select(func.count()).select_from(FaceTemplate).where(
-            FaceTemplate.owner_type == OwnerType.EMPLOYEE, FaceTemplate.owner_id == employee_id
-        )
-    )
-    return result.scalar_one()
+def _template_out(t: dict) -> FaceTemplateOut:
+    return FaceTemplateOut(id=t["id"], quality_score=t["quality_score"], model_version=t["model_version"],
+                           created_at=t["created_at"], is_primary=t["is_primary"],
+                           crop_url=f"/api/v1/media/template/{t['id']}" if t.get("has_image") else None)
 
 
 async def _get_employee_or_404(db: AsyncSession, employee_id: str) -> Employee:
@@ -88,6 +79,7 @@ async def create_employee(
     await db.flush()
     await write_audit(db, user.id, "create", "employee", employee.id, before=None, after={"name": employee.name})
     await db.commit()
+    biometrics.config_changed()
     return EmployeeOut.model_validate(employee)
 
 
@@ -113,15 +105,7 @@ async def list_employees(
     employees = list((await db.execute(stmt)).scalars().all())
 
     # one grouped query instead of one per person (1000-person clients)
-    counts: dict[str, int] = {}
-    ids = [e.id for e in employees]
-    for i in range(0, len(ids), 500):
-        rows = await db.execute(
-            select(FaceTemplate.owner_id, func.count()).where(
-                FaceTemplate.owner_type == OwnerType.EMPLOYEE, FaceTemplate.owner_id.in_(ids[i : i + 500])
-            ).group_by(FaceTemplate.owner_id)
-        )
-        counts.update({k: int(n) for k, n in rows.all()})
+    counts = await biometrics.counts(db, [e.id for e in employees])
     items = []
     for emp in employees:
         out = EmployeeOut.model_validate(emp)
@@ -170,6 +154,7 @@ async def update_employee(
     await db.flush()
     await write_audit(db, user.id, "update", "employee", employee.id, before=before, after=payload.model_dump(mode="json", exclude_unset=True))
     await db.commit()
+    biometrics.config_changed()
     return EmployeeOut.model_validate(employee)
 
 
@@ -178,12 +163,9 @@ async def delete_employee(
     employee_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> None:
     employee = await _get_employee_or_404(db, employee_id)
-
-    templates_result = await db.execute(
-        select(FaceTemplate).where(FaceTemplate.owner_type == OwnerType.EMPLOYEE, FaceTemplate.owner_id == employee.id)
-    )
-    for template in templates_result.scalars().all():
-        await db.delete(template)
+    # face templates + enrolment photos erased first (cloud: on the edge box;
+    # if the box is offline this fails and nothing is marked deleted)
+    await biometrics.purge(db, OwnerType.EMPLOYEE, employee.id)
 
     # Consent records are KEPT (marked revoked): they are the proof that the
     # face data was collected lawfully and has now been erased (DPDP).
@@ -197,10 +179,10 @@ async def delete_employee(
     employee.deleted_at = now
     if employee.date_of_leaving is None:
         employee.date_of_leaving = now.astimezone(LOCAL_TZ).date()
-    delete_employee_photos(employee.id)
 
     await write_audit(db, user.id, "delete", "employee", employee.id, before={"name": employee.name}, after=None)
     await db.commit()
+    biometrics.config_changed()
 
 
 @router.post("/{employee_id}/consent", response_model=ConsentOut, status_code=201)
@@ -245,11 +227,7 @@ async def revoke_consent(
     # removes this person from the matchable pool, rather than only
     # recording that consent was revoked while leaving them fully
     # matchable.
-    templates_result = await db.execute(
-        select(FaceTemplate).where(FaceTemplate.owner_type == OwnerType.EMPLOYEE, FaceTemplate.owner_id == employee.id)
-    )
-    for template in templates_result.scalars().all():
-        await db.delete(template)
+    await biometrics.purge(db, OwnerType.EMPLOYEE, employee.id)
     await write_audit(db, user.id, "revoke_consent", "employee", employee.id)
     await db.commit()
 
@@ -272,68 +250,24 @@ async def enroll_employee(
     if consent_result.scalar_one_or_none() is None:
         raise http_error(422, "consent_required", "An active consent record is required before enrollment")
 
-    min_face_pixels = await get_setting(db, "min_face_pixels")
-    existing_count = await _template_count(db, employee.id)
-
-    results: list[EnrollImageResult] = []
-    accepted_count = 0
-
+    min_face_pixels = int(await get_setting(db, "min_face_pixels"))
+    images: list[tuple[str, bytes]] = []
+    too_big: list[EnrollImageResult] = []
     for upload in files:
-        image_bytes = await upload.read(MAX_ENROLL_BYTES + 1)
-        if len(image_bytes) > MAX_ENROLL_BYTES:
-            results.append(EnrollImageResult(filename=upload.filename or "image", accepted=False,
+        data = await upload.read(MAX_ENROLL_BYTES + 1)
+        if len(data) > MAX_ENROLL_BYTES:
+            too_big.append(EnrollImageResult(filename=upload.filename or "image", accepted=False,
                                              reason="file_too_large", quality_score=0.0))
-            continue
-        if existing_count + accepted_count >= MAX_TEMPLATES_PER_OWNER:
-            results.append(
-                EnrollImageResult(filename=upload.filename or "image", accepted=False, reason="template_limit_reached", quality_score=0.0)
-            )
-            continue
-
-        outcome = process_enrollment_image(image_bytes, min_face_pixels)
-        if not outcome.accepted or outcome.embedding is None:
-            results.append(
-                EnrollImageResult(filename=upload.filename or "image", accepted=False, reason=outcome.reason, quality_score=outcome.quality_score)
-            )
-            continue
-
-        import cv2
-        import numpy as np
-
-        img = cv2.imdecode(np.frombuffer(image_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
-        h, w = img.shape[:2] if img is not None else (0, 0)
-        box = (w * 0.2, h * 0.1, w * 0.8, h * 0.9) if img is not None else (0, 0, 0, 0)
-        crop_path = save_face_crop(img, box, subdir=f"employees/{employee.id}") if img is not None else None
-
-        template = FaceTemplate(
-            owner_type=OwnerType.EMPLOYEE,
-            owner_id=employee.id,
-            embedding=outcome.embedding,
-            embedding_encrypted=encrypt_embedding(outcome.embedding),
-            quality_score=outcome.quality_score,
-            model_version=outcome.model_version,
-            source_image_path=crop_path,
-            is_primary=(existing_count + accepted_count == 0),
-        )
-        db.add(template)
-        await db.flush()
-        accepted_count += 1
-        results.append(
-            EnrollImageResult(
-                filename=upload.filename or "image",
-                accepted=True,
-                reason=None,
-                quality_score=outcome.quality_score,
-                template_id=template.id,
-            )
-        )
-        # Raw uploaded bytes (`image_bytes`) go out of scope here and are
-        # never written to disk -- only the derived crop above survives.
-
+        else:
+            images.append((upload.filename or "image", data))
+    # cloud: the photos go straight to the site's edge box (never stored here)
+    res = await biometrics.enroll(db, employee.id, images, min_face_pixels) if images else \
+        {"results": [], "accepted_count": 0, "template_count": (await biometrics.counts(db, [employee.id])).get(employee.id, 0)}
+    results = too_big + [EnrollImageResult(**r) for r in res["results"]]
+    accepted_count = int(res["accepted_count"])
     await write_audit(db, user.id, "enroll", "employee", employee.id, after={"accepted": accepted_count})
     await db.commit()
-
-    return EnrollResponse(results=results, accepted_count=accepted_count, template_count=existing_count + accepted_count)
+    return EnrollResponse(results=results, accepted_count=accepted_count, template_count=int(res["template_count"]))
 
 
 @router.get("/{employee_id}/templates", response_model=list[FaceTemplateOut])
@@ -341,15 +275,7 @@ async def list_templates(
     employee_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_hr)
 ) -> list[FaceTemplateOut]:
     await _get_employee_or_404(db, employee_id)
-    result = await db.execute(
-        select(FaceTemplate).where(FaceTemplate.owner_type == OwnerType.EMPLOYEE, FaceTemplate.owner_id == employee_id)
-    )
-    out = []
-    for t in result.scalars().all():
-        item = FaceTemplateOut.model_validate(t)
-        item.crop_url = f"/api/v1/media/template/{t.id}" if t.source_image_path else None
-        out.append(item)
-    return out
+    return [_template_out(t) for t in await biometrics.list_templates(db, OwnerType.EMPLOYEE, employee_id)]
 
 
 @router.delete("/{employee_id}/templates/{template_id}", status_code=204, response_model=None)
@@ -357,14 +283,7 @@ async def delete_template(
     employee_id: str, template_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_hr)
 ) -> None:
     await _get_employee_or_404(db, employee_id)
-    result = await db.execute(
-        select(FaceTemplate).where(
-            FaceTemplate.id == template_id, FaceTemplate.owner_type == OwnerType.EMPLOYEE, FaceTemplate.owner_id == employee_id
-        )
-    )
-    template = result.scalar_one_or_none()
-    if template is None:
+    if not await biometrics.delete_template(db, OwnerType.EMPLOYEE, employee_id, template_id):
         raise http_error(404, "template_not_found", "Face template not found")
-    await db.delete(template)
     await write_audit(db, user.id, "delete_template", "face_template", template_id)
     await db.commit()

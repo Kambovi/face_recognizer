@@ -13,6 +13,7 @@ from app.deps import get_current_user, http_error, require_admin
 from app.models.kiosk_heartbeats import KioskHeartbeat
 from app.models.users import User
 from app.schemas.settings import SettingsResponse, SettingsUpdateRequest
+from app.services import biometrics
 from app.services.audit import write_audit
 from app.services.settings_service import DEFAULT_SETTINGS, get_all_settings, set_setting
 from app.services.statutory import PT_SLABS
@@ -84,4 +85,5 @@ async def update_settings_endpoint(
     after = await get_all_settings(db)
     await write_audit(db, user.id, "update_settings", "settings", "global", before=before, after=after)
     await db.commit()
+    biometrics.config_changed()
     return SettingsResponse(settings=after, device=None)
