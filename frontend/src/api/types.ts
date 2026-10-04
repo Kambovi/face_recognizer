@@ -6,7 +6,7 @@ export type SubjectType = "EMPLOYEE" | "UNKNOWN";
 export type EventType = "IN" | "OUT";
 export type RejectReason = "liveness_failed" | "too_small" | "low_quality" | "no_match";
 export type UnknownStatusValue = "OPEN" | "LINKED" | "PROMOTED" | "IGNORED";
-export type UserRole = "admin" | "viewer";
+export type UserRole = "admin" | "hr" | "viewer";
 export type AnalyticsPeriod = "daily" | "weekly" | "monthly" | "annual";
 
 // -- auth ---------------------------------------------------------------------
@@ -21,6 +21,7 @@ export interface LoginResponse {
   token_type: string;
   role: string;
   email: string;
+  must_change_password: boolean;
 }
 
 // -- employees ------------------------------------------------------------------
@@ -48,6 +49,9 @@ export interface EmployeeOut {
   monthly_salary: number | null;
   is_active: boolean;
   created_at: string;
+  date_of_joining: string | null;
+  date_of_leaving: string | null;
+  weekly_off_days: number[] | null;
   template_count: number;
 }
 
@@ -67,6 +71,9 @@ export interface EmployeeCreate {
   home_kiosk_id?: string | null;
   contractor?: string | null;
   monthly_salary?: number | null;
+  date_of_joining?: string | null;
+  date_of_leaving?: string | null;
+  weekly_off_days?: number[] | null;
 }
 
 export interface EmployeeUpdate {
@@ -79,6 +86,9 @@ export interface EmployeeUpdate {
   watchlist_reason?: string | null;
   monthly_salary?: number | null;
   is_active?: boolean;
+  date_of_joining?: string | null;
+  date_of_leaving?: string | null;
+  weekly_off_days?: number[] | null;
 }
 
 export interface ConsentCreate {
@@ -690,8 +700,195 @@ export interface LeaveOut {
   id: string;
   employee_id: string;
   day: string;
-  kind: "paid" | "unpaid";
+  kind: "paid" | "unpaid" | "off";
+  leave_type: string | null;
+  portion: number;
   note: string | null;
+}
+
+export interface LeaveType {
+  code: string;
+  name: string;
+  paid: boolean;
+  annual: number;
+  accrual: "monthly" | "yearly" | "none";
+  carry_forward: number;
+}
+
+export interface LeaveBalance {
+  code: string;
+  name: string;
+  paid: boolean;
+  year: number;
+  year_from: string;
+  year_to: string;
+  opening: number;
+  credited: number;
+  used: number;
+  balance: number | null;
+}
+
+export interface HolidayOut {
+  id: string;
+  day: string;
+  name: string;
+  kind: "national" | "festival" | "optional";
+  weekday: string;
+}
+
+// -- users / cameras / audit ---------------------------------------------------------
+
+export interface UserOut {
+  id: string;
+  email: string;
+  name: string | null;
+  role: UserRole;
+  is_active: boolean;
+  must_change_password: boolean;
+  last_login_at: string | null;
+  locked: boolean;
+  created_at: string;
+  temporary_password?: string;
+}
+
+export interface DeviceOut {
+  id: string;
+  kiosk_id: string;
+  name: string | null;
+  enabled: boolean;
+  created_at: string;
+  last_used_at: string | null;
+  token?: string;
+}
+
+export interface AuditRow {
+  id: string;
+  at: string;
+  actor: string;
+  action: string;
+  entity: string;
+  entity_id: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+}
+
+// -- payroll --------------------------------------------------------------------------
+
+export type SalaryComponents = Record<"basic" | "da" | "hra" | "conveyance" | "special" | "other", number>;
+
+export interface PayrollProfile {
+  employee_id: string;
+  exists: boolean;
+  monthly_salary: number | null;
+  structure: SalaryComponents;
+  structure_from: "components" | "template";
+  gender: "M" | "F" | "O" | null;
+  pt_state: string | null;
+  pf_enabled: boolean;
+  pf_on_full_wage: boolean;
+  eps_eligible: boolean;
+  uan: string | null;
+  esi_enabled: boolean;
+  esic_ip: string | null;
+  pan_masked: string | null;
+  bank_name: string | null;
+  bank_account_masked: string | null;
+  ifsc: string | null;
+  payment_mode: "bank" | "cash" | "cheque";
+  tax_regime: "new" | "old";
+  tds_monthly: number;
+  components: SalaryComponents | null;
+}
+
+export interface PayrollProfileIn {
+  gender: "M" | "F" | "O" | null;
+  pt_state: string | null;
+  pf_enabled: boolean;
+  pf_on_full_wage: boolean;
+  eps_eligible: boolean;
+  uan: string | null;
+  esi_enabled: boolean;
+  esic_ip: string | null;
+  pan?: string | null;
+  bank_name: string | null;
+  bank_account?: string | null;
+  ifsc: string | null;
+  payment_mode: "bank" | "cash" | "cheque";
+  tax_regime: "new" | "old";
+  tds_monthly: number;
+  components: SalaryComponents | null;
+}
+
+export interface PayLine {
+  code: string;
+  label: string;
+  amount: number;
+  full?: number;
+}
+
+export interface Payslip {
+  employee_id: string;
+  emp_code: string;
+  name: string;
+  department: string | null;
+  month: string;
+  days_in_month: number;
+  paid_days: number;
+  lop_days: number;
+  gross_full: number;
+  earnings: PayLine[];
+  gross: number;
+  deductions: PayLine[];
+  total_deductions: number;
+  net: number;
+  employer: PayLine[];
+  employer_cost: number;
+  pt_state: string | null;
+  attendance: Record<string, number | null>;
+  warnings: string[];
+}
+
+export interface PayrollTotals {
+  people: number;
+  gross: number;
+  net: number;
+  pf_ee: number;
+  pf_er: number;
+  esi_ee: number;
+  esi_er: number;
+  pt: number;
+  tds: number;
+  employer_cost: number;
+  warnings: number;
+}
+
+export interface PayrollRunOut {
+  id: string;
+  month: string;
+  status: "draft" | "locked";
+  generated_at: string;
+  generated_by: string | null;
+  locked_at: string | null;
+  locked_by: string | null;
+  totals: PayrollTotals;
+  payslips?: Payslip[];
+}
+
+export interface PayrollAdjustment {
+  id: string;
+  month: string;
+  employee_id: string;
+  emp_code: string;
+  name: string;
+  kind: "earning" | "deduction";
+  label: string;
+  amount: number;
+}
+
+export interface PtState {
+  code: string;
+  name: string;
+  period: string;
 }
 
 export type ChatTargetKind = "employee" | "department" | "camera" | "contractor";

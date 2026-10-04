@@ -7,6 +7,8 @@ import { useProfile } from "../profile/ProfileContext";
 // department list (vendor-locked) and the per-camera cap look and behave the
 // same everywhere.
 
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
 const input =
   "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:bg-gray-50 disabled:text-gray-500";
 
@@ -84,6 +86,42 @@ export function PersonFields({ value, onChange, show = {}, currentCamera, camera
             placeholder="e.g. 18000"
             onChange={(e) => set({ monthly_salary: e.target.value })}
           />
+        </Field>
+      )}
+      {value.date_of_joining !== undefined && (
+        <Field label="Date of joining" hint="Pay starts this day">
+          <input type="date" className={input} value={value.date_of_joining} onChange={(e) => set({ date_of_joining: e.target.value })} />
+        </Field>
+      )}
+      {value.date_of_leaving !== undefined && (
+        <Field label="Last working day" hint="Blank = still working">
+          <input type="date" className={input} value={value.date_of_leaving} min={value.date_of_joining || undefined}
+            onChange={(e) => set({ date_of_leaving: e.target.value })} />
+        </Field>
+      )}
+      {value.weekly_off_days !== undefined && (
+        <Field label="Weekly off" hint="Own days, or the company default" wide>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <label className="mr-2 flex items-center gap-1.5 text-xs text-gray-600">
+              <input type="checkbox" checked={value.weekly_off_days === null}
+                onChange={(e) => set({ weekly_off_days: e.target.checked ? null : [6] })} />
+              Company default
+            </label>
+            {value.weekly_off_days !== null &&
+              WEEKDAYS.map((d, i) => {
+                const days = value.weekly_off_days ?? [];
+                const on = days.includes(i);
+                return (
+                  <button key={d} type="button"
+                    onClick={() => set({ weekly_off_days: on ? days.filter((x) => x !== i) : [...days, i].sort() })}
+                    className={on
+                      ? "rounded-md border border-brand-600 bg-brand-600 px-2.5 py-1 text-xs font-medium text-white"
+                      : "rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700"}>
+                    {d}
+                  </button>
+                );
+              })}
+          </div>
         </Field>
       )}
       <Field label="Home camera" hint={`Max ${profile.max_enrolled_per_camera} per camera`} wide>

@@ -23,7 +23,7 @@ export function Login(): JSX.Element {
     setError(null);
     try {
       await signIn(email, password);
-      navigate("/", { replace: true });
+      navigate("/", { replace: true }); // ProtectedRoute sends temporary passwords to /change-password
     } catch (err) {
       const apiError = err as ApiError;
       setError(apiError.detail || "Sign in failed");

@@ -1,17 +1,31 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getStoredToken, login as apiLogin, setStoredToken, setUnauthorizedHandler, toApiError } from "../api/client";
+import {
+  changePassword as apiChangePassword,
+  getStoredToken,
+  login as apiLogin,
+  logoutEverywhere,
+  setPasswordChangeHandler,
+  setStoredToken,
+  setUnauthorizedHandler,
+  toApiError,
+} from "../api/client";
 
 interface AuthUser {
   email: string;
   role: string;
+  must_change_password?: boolean;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
+  isAdmin: boolean;
+  isHr: boolean; // admin or HR: people, leave, payroll
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => void;
+  signOutEverywhere: () => Promise<void>;
+  changePassword: (current: string, next: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -51,30 +65,63 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     setUser(null);
   }, []);
 
+  const applyLogin = useCallback((r: { access_token: string; email: string; role: string; must_change_password: boolean }) => {
+    setStoredToken(r.access_token);
+    const nextUser: AuthUser = { email: r.email, role: r.role, must_change_password: r.must_change_password };
+    storeUser(nextUser);
+    setToken(r.access_token);
+    setUser(nextUser);
+  }, []);
+
   useEffect(() => {
     setUnauthorizedHandler(signOut);
-    return () => setUnauthorizedHandler(null);
+    setPasswordChangeHandler(() =>
+      setUser((u) => {
+        const next = u ? { ...u, must_change_password: true } : u;
+        storeUser(next);
+        return next;
+      }),
+    );
+    return () => {
+      setUnauthorizedHandler(null);
+      setPasswordChangeHandler(null);
+    };
   }, [signOut]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     setLoading(true);
     try {
-      const response = await apiLogin({ email, password });
-      setStoredToken(response.access_token);
-      const nextUser: AuthUser = { email: response.email, role: response.role };
-      storeUser(nextUser);
-      setToken(response.access_token);
-      setUser(nextUser);
+      applyLogin(await apiLogin({ email, password }));
     } catch (error) {
       throw toApiError(error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyLogin]);
+
+  const changePassword = useCallback(async (current: string, next: string) => {
+    try {
+      applyLogin(await apiChangePassword(current, next));
+    } catch (error) {
+      throw toApiError(error);
+    }
+  }, [applyLogin]);
+
+  const signOutEverywhere = useCallback(async () => {
+    try {
+      await logoutEverywhere();
+    } finally {
+      signOut();
+    }
+  }, [signOut]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, token, loading, signIn, signOut }),
-    [user, token, loading, signIn, signOut],
+    () => ({
+      user, token, loading, signIn, signOut, signOutEverywhere, changePassword,
+      isAdmin: user?.role === "admin",
+      isHr: user?.role === "admin" || user?.role === "hr",
+    }),
+    [user, token, loading, signIn, signOut, signOutEverywhere, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

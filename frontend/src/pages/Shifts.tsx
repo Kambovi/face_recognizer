@@ -32,7 +32,7 @@ function addDays(iso: string, n: number): string {
 
 export function Shifts(): JSX.Element {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "hr"; // HR may edit people + attendance too
   const [shifts, setShifts] = useState<ShiftOut[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

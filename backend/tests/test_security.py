@@ -238,3 +238,14 @@ def test_media_paths_cannot_escape_media_root():
     from app.services.media import absolute_path
 
     assert not absolute_path("../../etc/passwd").exists()
+
+
+async def test_settings_keep_their_types(client, admin_headers):
+    bad = await client.patch("/api/v1/settings", headers=admin_headers, json={"values": {"similarity_threshold": "0.4a"}})
+    assert bad.status_code == 422
+    bad = await client.patch("/api/v1/settings", headers=admin_headers, json={"values": {"payroll_state": "XX"}})
+    assert bad.status_code == 422
+    ok = await client.patch("/api/v1/settings", headers=admin_headers,
+                            json={"values": {"payroll_state": "mh", "attendance_start_date": "2026-09-15"}})
+    assert ok.status_code == 200
+    assert ok.json()["settings"]["payroll_state"] == "MH"

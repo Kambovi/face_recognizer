@@ -65,7 +65,7 @@ export function Dashboard(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "hr"; // HR may edit people + attendance too
   const [editing, setEditing] = useState<AttendanceRecord | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 

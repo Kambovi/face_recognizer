@@ -14,6 +14,10 @@ import { Shifts } from "./pages/Shifts";
 import { Muster } from "./pages/Muster";
 import { Alerts } from "./pages/Alerts";
 import { Sites } from "./pages/Sites";
+import { ChangePassword } from "./pages/ChangePassword";
+import { Payroll } from "./pages/Payroll";
+import { Holidays } from "./pages/Holidays";
+import { Admin } from "./pages/Admin";
 
 export function App(): JSX.Element {
   return (
@@ -21,6 +25,7 @@ export function App(): JSX.Element {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
         <Route
           element={
             <ProtectedRoute>
@@ -32,7 +37,10 @@ export function App(): JSX.Element {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/unknowns" element={<Unknowns />} />
           <Route path="/employees" element={<Employees />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings" element={<ProtectedRoute need="admin"><Settings /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute need="admin"><Admin /></ProtectedRoute>} />
+          <Route path="/payroll" element={<ProtectedRoute need="hr"><Payroll /></ProtectedRoute>} />
+          <Route path="/holidays" element={<Holidays />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/shifts" element={<Shifts />} />
           <Route path="/muster" element={<Muster />} />

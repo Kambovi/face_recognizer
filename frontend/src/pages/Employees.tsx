@@ -5,6 +5,7 @@ import { DataTable, type DataColumnMeta } from "../components/DataTable";
 import { AuthImage } from "../components/AuthImage";
 import { PersonFields } from "../components/PersonFields";
 import { LeavesSection } from "../components/LeavesSection";
+import { PayrollSection } from "../components/PayrollSection";
 import { EMPTY_PERSON, personPayload, useCameras, type PersonValues } from "../components/person";
 import { useProfile } from "../profile/ProfileContext";
 import {
@@ -27,7 +28,8 @@ function CreateEmployeeForm({ shifts, onCreated }: { shifts: ShiftOut[]; onCreat
   const profile = useProfile();
   const cameras = useCameras();
   const [open, setOpen] = useState(false);
-  const [values, setValues] = useState<PersonValues>({ ...EMPTY_PERSON, monthly_salary: "" });
+  const blank = (): PersonValues => ({ ...EMPTY_PERSON, monthly_salary: "", date_of_joining: new Date().toISOString().slice(0, 10), weekly_off_days: null });
+  const [values, setValues] = useState<PersonValues>(blank);
   const [shiftId, setShiftId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -46,7 +48,7 @@ function CreateEmployeeForm({ shifts, onCreated }: { shifts: ShiftOut[]; onCreat
         ...personPayload(values),
         shift_id: shiftId || null,
       });
-      setValues({ ...EMPTY_PERSON, monthly_salary: "" });
+      setValues(blank());
       setShiftId("");
       setOpen(false);
       onCreated();
@@ -119,6 +121,9 @@ function EmployeeDetailPanel({
     home_kiosk_id: employee.home_kiosk_id ?? "",
     contractor: employee.contractor ?? "",
     monthly_salary: employee.monthly_salary == null ? "" : String(employee.monthly_salary),
+    date_of_joining: employee.date_of_joining ?? "",
+    date_of_leaving: employee.date_of_leaving ?? "",
+    weekly_off_days: employee.weekly_off_days ?? null,
   });
   const [shiftId, setShiftId] = useState(employee.shift_id ?? "");
   const [watchReason, setWatchReason] = useState(employee.watchlist_reason ?? "");
@@ -154,7 +159,15 @@ function EmployeeDetailPanel({
 
   async function handleToggleActive(): Promise<void> {
     try {
-      await updateEmployee(employee.id, { is_active: !employee.is_active });
+      if (employee.is_active) {
+        // leaving: the last working day decides their final pay
+        const today = new Date().toISOString().slice(0, 10);
+        const last = window.prompt("Last working day (YYYY-MM-DD). They are paid up to this day.", values.date_of_leaving || today);
+        if (last === null) return;
+        await updateEmployee(employee.id, { is_active: false, date_of_leaving: last.trim() || today });
+      } else {
+        await updateEmployee(employee.id, { is_active: true, date_of_leaving: null });
+      }
       onChanged();
     } catch (err) {
       setError(toApiError(err).detail);
@@ -257,6 +270,8 @@ function EmployeeDetailPanel({
         </section>
 
         <LeavesSection employeeId={employee.id} />
+
+        <PayrollSection employeeId={employee.id} onSaved={onChanged} />
 
         <section className="mb-5">
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Consent</h3>

@@ -14,6 +14,11 @@ export interface PersonValues {
   contractor?: string;
   /** Monthly salary in ₹ as typed; undefined = field hidden (not admin / not this form). */
   monthly_salary?: string;
+  /** YYYY-MM-DD or "" ; undefined = field hidden */
+  date_of_joining?: string;
+  date_of_leaving?: string;
+  /** null = company default weekly off; undefined = field hidden */
+  weekly_off_days?: number[] | null;
 }
 
 export const EMPTY_PERSON: PersonValues = {
@@ -51,6 +56,9 @@ export function personPayload(v: PersonValues): {
   home_kiosk_id: string | null;
   contractor?: string | null;
   monthly_salary?: number | null;
+  date_of_joining?: string | null;
+  date_of_leaving?: string | null;
+  weekly_off_days?: number[] | null;
 } {
   return {
     department: v.department.trim() || null,
@@ -58,6 +66,9 @@ export function personPayload(v: PersonValues): {
     home_kiosk_id: v.home_kiosk_id || null,
     ...(v.contractor === undefined ? {} : { contractor: v.contractor.trim() || null }),
     ...(v.monthly_salary === undefined ? {} : { monthly_salary: parseSalary(v.monthly_salary) }),
+    ...(v.date_of_joining === undefined ? {} : { date_of_joining: v.date_of_joining || null }),
+    ...(v.date_of_leaving === undefined ? {} : { date_of_leaving: v.date_of_leaving || null }),
+    ...(v.weekly_off_days === undefined ? {} : { weekly_off_days: v.weekly_off_days }),
   };
 }
 

@@ -49,6 +49,18 @@ import type {
   ChatStatus,
   LeaveOut,
   PolicyStatus,
+  AuditRow,
+  DeviceOut,
+  HolidayOut,
+  LeaveBalance,
+  LeaveType,
+  PayrollAdjustment,
+  PayrollProfile,
+  PayrollProfileIn,
+  PayrollRunOut,
+  PtState,
+  UserOut,
+  UserRole,
 } from "./types";
 
 // Vite exposes build-time env vars via import.meta.env; falls back to the
@@ -118,11 +130,21 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler;
 }
 
+let onPasswordChangeRequired: (() => void) | null = null;
+export function setPasswordChangeHandler(handler: (() => void) | null): void {
+  onPasswordChangeRequired = handler;
+}
+
 http.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
+  (error: AxiosError<{ code?: string }>) => {
+    const url = error.config?.url ?? "";
+    // a wrong password on the login form is not "session expired"
+    if (error.response?.status === 401 && !url.endsWith("/auth/login") && !url.endsWith("/auth/change-password")) {
       onUnauthorized?.();
+    }
+    if (error.response?.status === 403 && error.response.data?.code === "password_change_required") {
+      onPasswordChangeRequired?.();
     }
     return Promise.reject(error);
   },
@@ -133,6 +155,151 @@ http.interceptors.response.use(
 export async function login(payload: LoginRequest): Promise<LoginResponse> {
   const { data } = await http.post<LoginResponse>("/auth/login", payload);
   return data;
+}
+
+export async function changePassword(current_password: string, new_password: string): Promise<LoginResponse> {
+  const { data } = await http.post<LoginResponse>("/auth/change-password", { current_password, new_password });
+  return data;
+}
+
+export async function logoutEverywhere(): Promise<void> {
+  await http.post("/auth/logout");
+}
+
+// -- users / cameras / audit (admin) ------------------------------------------------
+
+export async function listUsers(): Promise<UserOut[]> {
+  const { data } = await http.get<UserOut[]>("/users");
+  return data;
+}
+
+export async function createUser(payload: { email: string; name?: string | null; role: UserRole }): Promise<UserOut> {
+  const { data } = await http.post<UserOut>("/users", payload);
+  return data;
+}
+
+export async function updateUser(id: string, payload: { name?: string | null; role?: UserRole; is_active?: boolean }): Promise<UserOut> {
+  const { data } = await http.patch<UserOut>(`/users/${id}`, payload);
+  return data;
+}
+
+export async function resetUserPassword(id: string): Promise<UserOut> {
+  const { data } = await http.post<UserOut>(`/users/${id}/reset-password`);
+  return data;
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  await http.delete(`/users/${id}`);
+}
+
+export async function listAudit(params: { entity?: string; action?: string; limit?: number } = {}): Promise<AuditRow[]> {
+  const { data } = await http.get<AuditRow[]>("/audit", { params });
+  return data;
+}
+
+export async function listDevices(): Promise<DeviceOut[]> {
+  const { data } = await http.get<DeviceOut[]>("/devices");
+  return data;
+}
+
+export async function addDevice(kiosk_id: string, name: string | null): Promise<DeviceOut> {
+  const { data } = await http.post<DeviceOut>("/devices", { kiosk_id, name });
+  return data;
+}
+
+export async function rotateDevice(id: string): Promise<DeviceOut> {
+  const { data } = await http.post<DeviceOut>(`/devices/${id}/rotate`);
+  return data;
+}
+
+export async function updateDevice(id: string, payload: { name?: string | null; enabled?: boolean }): Promise<DeviceOut> {
+  const { data } = await http.patch<DeviceOut>(`/devices/${id}`, payload);
+  return data;
+}
+
+export async function deleteDevice(id: string): Promise<void> {
+  await http.delete(`/devices/${id}`);
+}
+
+// -- holidays ---------------------------------------------------------------------------
+
+export async function listHolidays(year: number): Promise<HolidayOut[]> {
+  const { data } = await http.get<HolidayOut[]>("/holidays", { params: { year } });
+  return data;
+}
+
+export async function addHoliday(payload: { day: string; name: string; kind: HolidayOut["kind"] }): Promise<HolidayOut> {
+  const { data } = await http.post<HolidayOut>("/holidays", payload);
+  return data;
+}
+
+export async function addHolidaysBulk(items: { day: string; name: string; kind: HolidayOut["kind"] }[]): Promise<{ saved: number }> {
+  const { data } = await http.post<{ saved: number }>("/holidays/bulk", items);
+  return data;
+}
+
+export async function deleteHoliday(id: string): Promise<void> {
+  await http.delete(`/holidays/${id}`);
+}
+
+export async function indiaHolidayPreset(year: number): Promise<{ day: string; name: string; kind: HolidayOut["kind"] }[]> {
+  const { data } = await http.get<{ day: string; name: string; kind: HolidayOut["kind"] }[]>("/holidays/presets/india", { params: { year } });
+  return data;
+}
+
+// -- payroll -----------------------------------------------------------------------------
+
+export async function getPayrollStates(): Promise<{ company_state: string; states: PtState[] }> {
+  const { data } = await http.get<{ company_state: string; states: PtState[] }>("/payroll/states");
+  return data;
+}
+
+export async function getPayrollProfile(employeeId: string): Promise<PayrollProfile> {
+  const { data } = await http.get<PayrollProfile>(`/payroll/profile/${employeeId}`);
+  return data;
+}
+
+export async function savePayrollProfile(employeeId: string, payload: PayrollProfileIn): Promise<PayrollProfile> {
+  const { data } = await http.put<PayrollProfile>(`/payroll/profile/${employeeId}`, payload);
+  return data;
+}
+
+export async function listPayrollRuns(): Promise<PayrollRunOut[]> {
+  const { data } = await http.get<PayrollRunOut[]>("/payroll/runs");
+  return data;
+}
+
+export async function getPayrollRun(month: string): Promise<PayrollRunOut> {
+  const { data } = await http.get<PayrollRunOut>(`/payroll/runs/${month}`);
+  return data;
+}
+
+export async function generatePayroll(month: string): Promise<PayrollRunOut> {
+  const { data } = await http.post<PayrollRunOut>(`/payroll/runs/${month}/generate`, undefined, { timeout: 120_000 });
+  return data;
+}
+
+export async function lockPayroll(month: string): Promise<PayrollRunOut> {
+  const { data } = await http.post<PayrollRunOut>(`/payroll/runs/${month}/lock`);
+  return data;
+}
+
+export async function unlockPayroll(month: string): Promise<PayrollRunOut> {
+  const { data } = await http.post<PayrollRunOut>(`/payroll/runs/${month}/unlock`);
+  return data;
+}
+
+export async function listAdjustments(month: string): Promise<PayrollAdjustment[]> {
+  const { data } = await http.get<PayrollAdjustment[]>("/payroll/adjustments", { params: { month } });
+  return data;
+}
+
+export async function addAdjustment(payload: { month: string; employee_id: string; kind: "earning" | "deduction"; label: string; amount: number }): Promise<void> {
+  await http.post("/payroll/adjustments", payload);
+}
+
+export async function deleteAdjustment(id: string): Promise<void> {
+  await http.delete(`/payroll/adjustments/${id}`);
 }
 
 // -- dashboard --------------------------------------------------------------
@@ -532,11 +699,28 @@ export async function addLeave(payload: {
   employee_id: string;
   date_from: string;
   date_to: string;
-  kind: "paid" | "unpaid";
+  leave_type?: string | null;
+  kind?: "paid" | "unpaid" | "off";
+  portion?: number;
   note?: string | null;
+  force?: boolean;
 }): Promise<{ days: number }> {
   const { data } = await http.post<{ days: number }>("/leaves", payload);
   return data;
+}
+
+export async function listLeaveTypes(): Promise<LeaveType[]> {
+  const { data } = await http.get<LeaveType[]>("/leaves/types");
+  return data;
+}
+
+export async function getLeaveBalance(employeeId: string): Promise<LeaveBalance[]> {
+  const { data } = await http.get<LeaveBalance[]>(`/leaves/balance/${employeeId}`);
+  return data;
+}
+
+export async function setLeaveOpening(payload: { employee_id: string; year: number; leave_type: string; days: number }): Promise<void> {
+  await http.put("/leaves/opening", payload);
 }
 
 export async function deleteLeave(id: string): Promise<void> {

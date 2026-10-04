@@ -3,7 +3,7 @@ import { getSettings, updateSettings, toApiError } from "../api/client";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { ChatbotSettings } from "../components/ChatbotSettings";
 
-type FieldKind = "number" | "boolean" | "string" | "weekdays";
+type FieldKind = "number" | "boolean" | "string" | "weekdays" | "select" | "date";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -13,7 +13,15 @@ interface FieldSpec {
   kind: FieldKind;
   step?: number;
   hint?: string;
+  options?: [string, string][];
 }
+
+const PT_STATES: [string, string][] = [
+  ["", "No professional tax (Delhi, UP, Haryana, Rajasthan, Punjab ...)"],
+  ["MH", "Maharashtra"], ["KA", "Karnataka"], ["WB", "West Bengal"], ["GJ", "Gujarat"], ["TG", "Telangana"],
+  ["AP", "Andhra Pradesh"], ["MP", "Madhya Pradesh"], ["OD", "Odisha"], ["BR", "Bihar"], ["JH", "Jharkhand"],
+  ["AS", "Assam"], ["TN", "Tamil Nadu"], ["KL", "Kerala"],
+];
 
 // Mirrors backend/app/services/settings_service.py's DEFAULT_SETTINGS keys.
 // Grouped for readability; any key the backend adds later that isn't listed
@@ -94,6 +102,30 @@ const FIELD_GROUPS: { title: string; fields: FieldSpec[] }[] = [
     ],
   },
   {
+    title: "Statutory payroll (check with your CA)",
+    fields: [
+      { key: "payroll_state", label: "Professional tax state", kind: "select", options: PT_STATES },
+      { key: "payroll_proration", label: "Salary for part months", kind: "select", options: [["calendar", "Monthly / days in month x paid days"], ["fixed26", "Monthly / 26 per unpaid day"]] },
+      { key: "payroll_basic_percent", label: "Basic = % of gross (template)", kind: "number", step: 1, hint: "Labour codes: Basic + DA >= 50%" },
+      { key: "payroll_hra_percent", label: "HRA = % of basic (template)", kind: "number", step: 1 },
+      { key: "pf_enabled", label: "Provident fund", kind: "boolean" },
+      { key: "esi_enabled", label: "ESI", kind: "boolean" },
+      { key: "labour_code_wages", label: "Labour-code 50% wage rule for PF", kind: "boolean" },
+      { key: "esi_wage_limit", label: "ESI wage limit (₹/month)", kind: "number", step: 500 },
+      { key: "ot_pay_enabled", label: "Pay overtime in salary", kind: "boolean" },
+      { key: "ot_pay_multiplier", label: "OT rate (x ordinary)", kind: "number", step: 0.5, hint: "Factories Act: 2" },
+    ],
+  },
+  {
+    title: "Attendance & leave",
+    fields: [
+      { key: "attendance_start_date", label: "Go-live date", kind: "date", hint: "Days before it are paid (not tracked), not absent" },
+      { key: "leave_year_start_month", label: "Leave year starts in", kind: "select", options: [["1", "January"], ["4", "April"]] },
+      { key: "max_event_age_hours", label: "Accept offline camera events up to (hours old)", kind: "number", step: 1 },
+      { key: "max_event_future_minutes", label: "Camera clock may be ahead by (minutes)", kind: "number", step: 1 },
+    ],
+  },
+  {
     title: "Reporting",
     fields: [
       { key: "working_days_per_week", label: "Working days per week", kind: "number", step: 1 },
@@ -150,7 +182,10 @@ export function Settings(): JSX.Element {
           return;
         }
       } else {
-        payloadValues = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ""));
+        // "" is a real value for payroll_state (= no PT); elsewhere it means "left blank"
+        payloadValues = Object.fromEntries(
+          Object.entries(values).filter(([k, v]) => v !== undefined && (v !== "" || k === "payroll_state")),
+        );
       }
       const res = await updateSettings({ values: payloadValues });
       setValues(res.settings);
@@ -236,6 +271,36 @@ export function Settings(): JSX.Element {
                         );
                       })}
                     </div>
+                  </div>
+                );
+              }
+              if (field.kind === "select") {
+                return (
+                  <div key={field.key}>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">{field.label}</label>
+                    <select
+                      value={value === undefined || value === null ? "" : String(value)}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const numeric = field.options?.every(([v]) => /^\d+$/.test(v));
+                        setValues((prev) => ({ ...prev, [field.key]: numeric ? Number(raw) : raw }));
+                      }}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    >
+                      {field.options?.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    {field.hint && <p className="mt-0.5 text-xs text-gray-400">{field.hint}</p>}
+                  </div>
+                );
+              }
+              if (field.kind === "date") {
+                return (
+                  <div key={field.key}>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">{field.label}</label>
+                    <input type="date" value={value ? String(value) : ""}
+                      onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value || null }))}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
+                    {field.hint && <p className="mt-0.5 text-xs text-gray-400">{field.hint}</p>}
                   </div>
                 );
               }

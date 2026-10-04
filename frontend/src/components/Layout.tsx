@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import clsx from "clsx";
-import { Building2, ChevronDown, GraduationCap, Hospital, LogOut, Menu, Siren, X, type LucideIcon } from "lucide-react";
+import { Building2, ChevronDown, GraduationCap, Hospital, KeyRound, LogOut, Menu, MonitorX, Siren, X, type LucideIcon } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { AlertBell } from "./alerts/AlertBell";
 import { ChatWidget } from "./chat/ChatWidget";
@@ -20,7 +20,7 @@ const SECTOR_ICON: Record<OrgType, LucideIcon> = {
 // (Before 2026-09-26 the header wrapped onto two rows even on a laptop and
 // took a third of a phone screen.)
 export function Layout(): JSX.Element {
-  const { user, signOut } = useAuth();
+  const { user, signOut, signOutEverywhere, isAdmin, isHr } = useAuth();
   const profile = useProfile();
   const SectorIcon = SECTOR_ICON[profile.org_type] ?? Building2;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -34,10 +34,13 @@ export function Layout(): JSX.Element {
     { to: "/employees", label: profile.person_label_plural },
     { to: "/unknowns", label: "Unknown faces" },
     { to: "/reports", label: "Reports" },
+    { to: "/payroll", label: "Payroll", need: "hr" },
+    { to: "/holidays", label: "Holidays" },
     { to: "/shifts", label: "Shifts" },
     { to: "/sites", label: "Sites" },
-    { to: "/settings", label: "Settings", adminOnly: true },
-  ].filter((item) => !item.adminOnly || user?.role === "admin");
+    { to: "/admin", label: "Admin", need: "admin" },
+    { to: "/settings", label: "Settings", need: "admin" },
+  ].filter((item) => !item.need || (item.need === "admin" ? isAdmin : isHr));
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -53,7 +56,7 @@ export function Layout(): JSX.Element {
             </span>
           </Link>
 
-          <nav className="ml-4 hidden flex-1 items-center gap-0.5 lg:flex">
+          <nav className="ml-4 hidden flex-1 items-center gap-0.5 xl:flex">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
@@ -81,12 +84,12 @@ export function Layout(): JSX.Element {
               <Siren className="h-4 w-4" aria-hidden />
               <span className="hidden sm:inline">Emergency</span>
             </Link>
-            <div className="hidden lg:block">
-              <AccountMenu email={user?.email ?? ""} role={user?.role ?? ""} onSignOut={signOut} />
+            <div className="hidden xl:block">
+              <AccountMenu email={user?.email ?? ""} role={user?.role ?? ""} onSignOut={signOut} onSignOutAll={signOutEverywhere} />
             </div>
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="rounded-md p-2 text-gray-600 hover:bg-gray-100 lg:hidden"
+              className="rounded-md p-2 text-gray-600 hover:bg-gray-100 xl:hidden"
               aria-label={menuOpen ? "Close menu" : "Open menu"}
               aria-expanded={menuOpen}
             >
@@ -96,7 +99,7 @@ export function Layout(): JSX.Element {
         </div>
 
         {menuOpen && (
-          <div className="border-t border-gray-100 bg-white px-4 pb-4 pt-2 lg:hidden">
+          <div className="border-t border-gray-100 bg-white px-4 pb-4 pt-2 xl:hidden">
             <nav className="grid grid-cols-2 gap-1">
               {navItems.map((item) => (
                 <NavLink
@@ -118,9 +121,12 @@ export function Layout(): JSX.Element {
               <span className="truncate text-sm text-gray-500">
                 {user?.email} <span className="text-gray-400">({user?.role})</span>
               </span>
-              <button onClick={signOut} className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700">
-                <LogOut className="h-4 w-4" aria-hidden /> Sign out
-              </button>
+              <div className="flex items-center gap-2">
+                <Link to="/change-password" className="text-sm text-gray-600 underline">Password</Link>
+                <button onClick={signOut} className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700">
+                  <LogOut className="h-4 w-4" aria-hidden /> Sign out
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -133,7 +139,9 @@ export function Layout(): JSX.Element {
   );
 }
 
-function AccountMenu({ email, role, onSignOut }: { email: string; role: string; onSignOut: () => void }): JSX.Element {
+function AccountMenu({ email, role, onSignOut, onSignOutAll }: {
+  email: string; role: string; onSignOut: () => void; onSignOutAll: () => Promise<void>;
+}): JSX.Element {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -160,8 +168,14 @@ function AccountMenu({ email, role, onSignOut }: { email: string; role: string; 
         <div className="absolute right-0 z-40 mt-2 w-60 rounded-xl border border-gray-200 bg-white p-2 shadow-xl">
           <p className="truncate px-2 pt-1 text-sm font-medium text-gray-900">{email}</p>
           <p className="px-2 pb-2 text-xs text-gray-500">Role: {role}</p>
+          <Link to="/change-password" onClick={() => setOpen(false)} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            <KeyRound className="h-4 w-4" aria-hidden /> Change password
+          </Link>
           <button onClick={onSignOut} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-100">
             <LogOut className="h-4 w-4" aria-hidden /> Sign out
+          </button>
+          <button onClick={() => void onSignOutAll()} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-500 hover:bg-gray-100">
+            <MonitorX className="h-4 w-4" aria-hidden /> Sign out on all devices
           </button>
         </div>
       )}
