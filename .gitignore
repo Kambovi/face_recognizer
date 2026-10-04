@@ -24,3 +24,7 @@ data/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# update packages handed over by Claude (not source code)
+*.bundle
+apply_*update*.ps1
