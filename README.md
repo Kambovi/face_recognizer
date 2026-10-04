@@ -27,6 +27,21 @@ See `docs/ARCHITECTURE.md` for the full module-by-module tour,
 `docs/RUNBOOK.md` for operating it, and `docs/DPDP_COMPLIANCE.md` for how
 its data-protection controls map onto India's DPDP Act.
 
+## SaaS (v3): cloud + edge box
+
+The same codebase runs in three roles (`APP_ROLE`):
+
+* `standalone` (default) -- everything on one machine, as before.
+* `cloud` -- the hosted service: one database per client, dashboard,
+  payroll, reports, chatbot. Never stores faces or face photos.
+* `edge` -- a small box at the client's site next to the cameras: face
+  templates, photos and policy documents stay there; only results go up.
+
+Go-live guide (server, DNS, database config, backups, first client):
+**docs/CLOUD_SETUP.md**. Design and data flow: **docs/SAAS_ARCHITECTURE.md**.
+Vendor console: `backend/scripts/tenants.py`. Deploy files: `deploy/cloud`,
+`deploy/edge`.
+
 ## Quickstart
 
 Requires Docker and Docker Compose. No local Python/Node install needed to

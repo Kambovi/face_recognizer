@@ -30,7 +30,7 @@ services:
   api:
     build:
       context: ../../backend
-      target: base
+      target: runtime
     restart: unless-stopped
     depends_on:
       db:

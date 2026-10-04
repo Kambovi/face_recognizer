@@ -7,7 +7,9 @@ For a new client with 50-2000 people, instead of adding everyone by hand:
      CSV UTF-8). Start from the template:
          python scripts/import_people.py --template people.csv
      Columns (only emp_code and name are required):
-         emp_code, name, department, designation, shift, home_camera, contractor, monthly_salary
+         emp_code, name, department, designation, shift, home_camera, contractor, monthly_salary,
+         date_of_joining (YYYY-MM-DD or DD-MM-YYYY), gender (M/F), uan, esic_ip, pan,
+         bank_name, bank_account, ifsc
      `department` must be one of the departments set with setup_client.py,
      `shift` is a shift NAME (e.g. General, Night), `home_camera` a camera id.
 
@@ -41,7 +43,34 @@ from typing import Any
 
 import httpx
 
-COLUMNS = ["emp_code", "name", "department", "designation", "shift", "home_camera", "contractor", "monthly_salary"]
+COLUMNS = ["emp_code", "name", "department", "designation", "shift", "home_camera", "contractor", "monthly_salary",
+           "date_of_joining", "gender", "uan", "esic_ip", "pan", "bank_name", "bank_account", "ifsc"]
+PAYROLL_COLS = ("gender", "uan", "esic_ip", "pan", "bank_name", "bank_account", "ifsc")
+
+
+def parse_date(v: str | None) -> str | None:
+    from datetime import datetime
+
+    v = (v or "").strip()
+    if not v:
+        return None
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(v, fmt).date().isoformat()
+        except ValueError:
+            continue
+    raise ValueError(f"date_of_joining '{v}' -- use YYYY-MM-DD or DD-MM-YYYY")
+
+
+def payroll_details(r: dict[str, str]) -> dict[str, Any] | None:
+    vals = {k: (r.get(k) or "").strip() for k in PAYROLL_COLS}
+    if not any(vals.values()):
+        return None
+    return {"gender": vals["gender"].upper()[:1] or None, "uan": vals["uan"] or None, "esic_ip": vals["esic_ip"] or None,
+            "pan": vals["pan"].upper() or None, "bank_name": vals["bank_name"] or None,
+            "bank_account": vals["bank_account"] or None, "ifsc": vals["ifsc"].upper() or None,
+            "pt_state": None, "pf_enabled": True, "pf_on_full_wage": False, "eps_eligible": True, "esi_enabled": True,
+            "payment_mode": "bank", "tax_regime": "new", "tds_monthly": 0, "components": None}
 PHOTO_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 MAX_PHOTOS = 5
 
@@ -64,8 +93,10 @@ def write_template(path: Path) -> None:
     with path.open("w", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh)
         w.writerow(COLUMNS)
-        w.writerow(["EMP001", "Ravi Kumar", "Production", "Operator", "General", "main-gate", "Sharma Manpower", "18000"])
-        w.writerow(["EMP002", "Anita Singh", "Quality", "Inspector", "Night", "main-gate", "", "22500"])
+        w.writerow(["EMP001", "Ravi Kumar", "Production", "Operator", "General", "main-gate", "Sharma Manpower", "18000",
+                    "2021-04-01", "M", "100123456789", "3100123456", "ABCDE1234F", "HDFC Bank", "50100012345678", "HDFC0001234"])
+        w.writerow(["EMP002", "Anita Singh", "Quality", "Inspector", "Night", "main-gate", "", "22500",
+                    "15-07-2019", "F", "", "", "", "", "", ""])
     print(f"Template written: {path}")
 
 
@@ -101,8 +132,9 @@ def photos_for(folder: Path | None, code: str) -> list[Path]:
 
 
 class Api:
-    def __init__(self, base: str, email: str, password: str) -> None:
-        self.c = httpx.Client(base_url=base.rstrip("/") + "/api/v1", timeout=120)
+    def __init__(self, base: str, email: str, password: str, tenant: str | None = None) -> None:
+        self.c = httpx.Client(base_url=base.rstrip("/") + "/api/v1", timeout=120,
+                              headers={"X-Tenant": tenant} if tenant else None)
         try:
             r = self.c.post("/auth/login", json={"email": email, "password": password})
         except httpx.ConnectError:
@@ -147,7 +179,8 @@ def main() -> None:
     ap.add_argument("--template", type=Path, help="write an example CSV here and exit")
     ap.add_argument("--csv", type=Path)
     ap.add_argument("--photos", type=Path, help="folder with <ID>.jpg files or <ID>/ sub-folders")
-    ap.add_argument("--api", default="http://localhost:8000")
+    ap.add_argument("--api", default="http://localhost:8000", help="SaaS: https://<client>.<your domain>")
+    ap.add_argument("--tenant", help="testing a cloud install without DNS: send X-Tenant (non-production only)")
     ap.add_argument("--email", help="admin login (asked if not given)")
     ap.add_argument("--password", help="avoid: stays in shell history")
     ap.add_argument("--dry-run", action="store_true", help="check the CSV and photos, change nothing")
@@ -181,7 +214,7 @@ def main() -> None:
         return
 
     email = args.email or input("Admin email: ")
-    api = Api(args.api, email, args.password or getpass.getpass("Password: "))
+    api = Api(args.api, email, args.password or getpass.getpass("Password: "), tenant=args.tenant)
     existing = api.existing_codes()
     shifts = api.shifts()
 
@@ -191,6 +224,8 @@ def main() -> None:
         res: dict[str, Any] = {"emp_code": code, "name": r["name"], "status": "", "photos_ok": 0, "photos_rejected": "", "error": ""}
         try:
             salary = parse_salary(r.get("monthly_salary"))
+            doj = parse_date(r.get("date_of_joining"))
+            pay = payroll_details(r)
             if code in existing:
                 emp_id = existing[code]
                 res["status"] = "already existed"
@@ -199,6 +234,13 @@ def main() -> None:
                     if ur.status_code != 200:
                         raise ValueError("salary: " + err(ur))
                     res["status"] = "already existed, salary updated"
+                if doj:
+                    api.c.patch(f"/employees/{emp_id}", json={"date_of_joining": doj})
+                if pay is not None:
+                    pr = api.c.put(f"/payroll/profile/{emp_id}", json=pay)
+                    if pr.status_code != 200:
+                        raise ValueError("payroll details: " + err(pr))
+                    res["status"] += ", payroll details updated"
                 if not args.add_photos:
                     results.append(res)
                     print(f"[{i}/{len(rows)}] -- {code} {r['name']}: {res['status']} (use --add-photos to add photos)")
@@ -215,6 +257,7 @@ def main() -> None:
                     "shift_id": shift_id, "home_kiosk_id": r.get("home_camera") or None,
                     "contractor": r.get("contractor") or None,
                     "monthly_salary": salary,
+                    "date_of_joining": doj,
                 }
                 cr = api.c.post("/employees", json=body)
                 if cr.status_code != 201:
@@ -226,6 +269,10 @@ def main() -> None:
                 if con.status_code != 201:
                     raise ValueError("consent: " + err(con))
                 res["status"] = "created"
+            if pay is not None and res["status"] == "created":
+                pr = api.c.put(f"/payroll/profile/{emp_id}", json=pay)
+                if pr.status_code != 200:
+                    raise ValueError("payroll details: " + err(pr))
             pics = photos_for(args.photos, code)
             if pics:
                 files = [("files", (p.name, p.read_bytes(), "image/jpeg")) for p in pics]
