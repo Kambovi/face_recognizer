@@ -34,6 +34,11 @@ class QualityConfig:
     min_brightness: float = 40.0  # mean grey level of the face crop (0-255)
     min_sharpness: float = 20.0  # Laplacian variance on a 112x112 grey crop
     edge_margin: float = 0.01  # face box must not touch the frame edge (fraction of frame)
+    # Combined score below this = reject. Added 2026-09-29: a hand over the
+    # face passed every single check above (landmarks are still predicted)
+    # but scored 0.35-0.41, against 0.73-0.76 for the same person's clear
+    # face, and became an "unknown" person.
+    min_score: float = 0.50
 
 
 @dataclass
@@ -95,5 +100,7 @@ def assess(frame: np.ndarray, box: Box, kps: np.ndarray | None, det_score: float
     # Combined score used to rank passing candidates: pose closeness to level,
     # detector confidence and sharpness (soft-clipped).
     pitch_closeness = max(0.0, 1.0 - abs(pitch - 0.5) * 2.0)
-    score = det_score * frontal * (0.5 + 0.5 * pitch_closeness) * min(1.0, sharpness / 200.0 + 0.5)
-    return QualityResult(ok=True, reason=None, score=float(min(1.0, score)))
+    score = float(min(1.0, det_score * frontal * (0.5 + 0.5 * pitch_closeness) * min(1.0, sharpness / 200.0 + 0.5)))
+    if score < cfg.min_score:
+        return QualityResult(ok=False, reason="low_quality_score", score=score)  # e.g. hand over the face
+    return QualityResult(ok=True, reason=None, score=score)

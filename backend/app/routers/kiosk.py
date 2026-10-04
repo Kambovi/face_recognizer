@@ -30,6 +30,9 @@ async def post_kiosk_event(
 ) -> KioskEventResponse:
     config = await get_all_settings(db)
     outcome = await process_kiosk_event(db, payload, config)
+    if outcome.event is None:  # unclear face: logged as a sighting, nothing else
+        return KioskEventResponse(event_id=None, subject_type=None, face_id=None, event_type=None,
+                                  similarity=None, created=False)
     return KioskEventResponse(
         event_id=outcome.event.id,
         subject_type=outcome.event.subject_type.value if outcome.event.subject_type else None,

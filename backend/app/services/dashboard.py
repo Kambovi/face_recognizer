@@ -34,6 +34,7 @@ from app.models.employees import Employee
 from app.models.enums import EventType, OwnerType, RejectReason, SubjectType, UnknownStatus
 from app.models.face_templates import FaceTemplate
 from app.models.kiosk_heartbeats import KioskHeartbeat
+from app.models.sightings import Sighting
 from app.models.shifts import Shift
 from app.models.unknown_identities import UnknownIdentity
 
@@ -363,6 +364,24 @@ async def get_dashboard(db: AsyncSession, date_from: date, date_to: date) -> Das
                 date=_local_date(e.occurred_at).isoformat(), kiosk_ids=[e.kiosk_id],
             )
         )
+
+    # unclear / covered faces the server refused to turn into anyone
+    # (recognition.py): one exception per camera per day with the count
+    unclear = (await db.execute(
+        select(Sighting.kiosk_id, Sighting.occurred_at).where(
+            Sighting.employee_id.is_(None), Sighting.unknown_identity_id.is_(None),
+            Sighting.occurred_at >= start_utc, Sighting.occurred_at < end_utc)
+    )).all()
+    per: dict[tuple[str, date], list[datetime]] = {}
+    for kiosk_id, ts in unclear:
+        per.setdefault((kiosk_id, _local_date(ts)), []).append(ts)
+    for (kiosk_id, d), times in sorted(per.items()):
+        hhmm = ", ".join(sorted(t.astimezone(LOCAL_TZ).strftime("%H:%M") for t in times)[:6])
+        exceptions.append(ExceptionRow(
+            kind="unclear_face", face_id=kiosk_id, label=None,
+            detail=f"{len(times)} unclear / covered face(s) not recorded: {hhmm}", date=d.isoformat(),
+            kiosk_ids=[kiosk_id],
+        ))
 
     heartbeat_kiosks = (await db.execute(select(KioskHeartbeat.kiosk_id))).scalars().all()
     kiosks = sorted(set(heartbeat_kiosks) | {e.kiosk_id for e in all_events})

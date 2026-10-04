@@ -10,12 +10,14 @@ from typing import Any
 from dataclasses import dataclass
 from datetime import timezone
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attendance_events import AttendanceEvent
 from app.models.employees import Employee
 from app.models.enums import OwnerType, RejectReason, SubjectType
+from app.models.sightings import Sighting
 from app.schemas.kiosk import KioskEventRequest
 from app.services import matching
 from app.services import alerts
@@ -28,9 +30,12 @@ from app.services.unknown_identity import cluster_or_create_unknown
 MODEL_VERSION = "buffalo_l"
 
 
+logger = structlog.get_logger(__name__)
+
+
 @dataclass
 class RecognitionOutcome:
-    event: AttendanceEvent
+    event: AttendanceEvent | None  # None = unclear face, logged as a sighting only
     created: bool
     face_id: str | None
 
@@ -113,6 +118,23 @@ async def process_kiosk_event(
         return RecognitionOutcome(event=event, created=created, face_id=employee.face_id)
 
     # UNKNOWN PATH -- never guess an employee.
+    # But only a CLEAR face that looks like nobody on the roll becomes an
+    # unknown person (2026-09-29: an employee leaving with a hand over the
+    # face became "UNK-0051"). A poor frame, or one close to an employee but
+    # below the match threshold, is only logged as an unclear sighting:
+    # no attendance, no unknown identity, no template learnt.
+    quality = payload.quality_score if payload.quality_score is not None else 1.0
+    near = best.similarity if best is not None else 0.0
+    if (quality < float(config.get("unknown_min_quality", 0.6))
+            or near >= float(config.get("unknown_near_match_similarity", 0.30))):
+        db.add(Sighting(occurred_at=occurred_at, kiosk_id=payload.kiosk_id, subject_type=SubjectType.UNKNOWN,
+                        employee_id=None, unknown_identity_id=None, event_id=None,
+                        similarity=near, liveness_score=payload.liveness_score))
+        await db.commit()
+        logger.info("unclear_face_not_recorded", kiosk_id=payload.kiosk_id, quality=round(quality, 2),
+                    best_similarity=round(near, 3))
+        return RecognitionOutcome(event=None, created=False, face_id=None)
+
     cluster_result = await cluster_or_create_unknown(
         db,
         embedding=payload.embedding,
@@ -125,6 +147,7 @@ async def process_kiosk_event(
         kiosk_id=payload.kiosk_id,
         recent_window_seconds=float(config.get("unknown_recent_window_seconds", 120)),
         recent_threshold=float(config.get("unknown_recent_threshold", 0.30)),
+        min_template_quality=float(config.get("quality_min_score", 0.5)),
     )
     data = RecognitionEventInput(
         subject_type=SubjectType.UNKNOWN,

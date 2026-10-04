@@ -61,6 +61,7 @@ _DEFAULT_SETTINGS: dict[str, Any] = {
     "quality_max_pitch_ratio": 0.75,
     "quality_min_brightness": 40.0,
     "quality_min_sharpness": 20.0,
+    "quality_min_score": 0.50,
 }
 
 
@@ -109,6 +110,7 @@ def build_pipeline_config(kiosk_id: str, settings: dict[str, Any]) -> PipelineCo
         max_pitch_ratio=float(merged["quality_max_pitch_ratio"]),
         min_brightness=float(merged["quality_min_brightness"]),
         min_sharpness=float(merged["quality_min_sharpness"]),
+        min_score=float(merged["quality_min_score"]),
     )
     return PipelineConfig(
         kiosk_id=kiosk_id,
