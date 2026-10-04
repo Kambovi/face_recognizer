@@ -231,7 +231,7 @@ async def test_config_hides_key_and_leaves_api(client, db_session, admin_headers
     await db_session.commit()
     body = {"employee_id": e.id, "date_from": "2026-08-10", "date_to": "2026-08-12", "kind": "paid"}
     assert (await client.post("/api/v1/leaves", json=body, headers=viewer_headers)).status_code == 403
-    assert (await client.post("/api/v1/leaves", json=body, headers=admin_headers)).json() == {"days": 3}
+    assert (await client.post("/api/v1/leaves", json=body, headers=admin_headers)).json()["days"] == 3
     rows = (await client.get(f"/api/v1/leaves?employee_id={e.id}", headers=admin_headers)).json()
     assert len(rows) == 3
     assert (await client.delete(f"/api/v1/leaves/{rows[0]['id']}", headers=admin_headers)).status_code == 204

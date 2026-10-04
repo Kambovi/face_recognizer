@@ -10,7 +10,9 @@ from app.models.face_templates import FaceTemplate  # noqa: F401
 from app.models.holidays import Holiday  # noqa: F401
 from app.models.kiosk_devices import KioskDevice  # noqa: F401
 from app.models.kiosk_heartbeats import KioskHeartbeat  # noqa: F401
+from app.models.leave_openings import LeaveOpening  # noqa: F401
 from app.models.leaves import Leave  # noqa: F401
+from app.models.payroll import EmployeePayroll, PayrollAdjustment, PayrollRun, Payslip  # noqa: F401
 from app.models.settings import Setting  # noqa: F401
 from app.models.shift_assignments import ShiftAssignment  # noqa: F401
 from app.models.sightings import Sighting  # noqa: F401
@@ -30,6 +32,11 @@ __all__ = [
     "KioskDevice",
     "KioskHeartbeat",
     "Leave",
+    "LeaveOpening",
+    "EmployeePayroll",
+    "PayrollAdjustment",
+    "PayrollRun",
+    "Payslip",
     "Setting",
     "Shift",
     "ShiftAssignment",

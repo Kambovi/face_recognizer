@@ -78,7 +78,12 @@ async def create_employee(
         home_kiosk_id=payload.home_kiosk_id or None,
         contractor=(payload.contractor or "").strip() or None,
         monthly_salary=payload.monthly_salary,
+        date_of_joining=payload.date_of_joining,
+        date_of_leaving=payload.date_of_leaving,
+        weekly_off_days=payload.weekly_off_days,
     )
+    if employee.date_of_leaving and employee.date_of_joining and employee.date_of_leaving < employee.date_of_joining:
+        raise http_error(422, "bad_dates", "Leaving date is before joining date")
     db.add(employee)
     await db.flush()
     await write_audit(db, user.id, "create", "employee", employee.id, before=None, after={"name": employee.name})
@@ -154,11 +159,16 @@ async def update_employee(
         camera_changed=new_camera != employee.home_kiosk_id or (bool(new_active) and not employee.is_active),
     )
     before = {"name": employee.name, "is_active": employee.is_active, "department": employee.department,
-              "home_kiosk_id": employee.home_kiosk_id}
+              "home_kiosk_id": employee.home_kiosk_id, "monthly_salary": float(employee.monthly_salary or 0) or None,
+              "date_of_joining": str(employee.date_of_joining or ""), "date_of_leaving": str(employee.date_of_leaving or "")}
+    doj = changes.get("date_of_joining", employee.date_of_joining)
+    dol = changes.get("date_of_leaving", employee.date_of_leaving)
+    if doj and dol and dol < doj:
+        raise http_error(422, "bad_dates", "Leaving date is before joining date")
     for field, value in changes.items():
         setattr(employee, field, value)
     await db.flush()
-    await write_audit(db, user.id, "update", "employee", employee.id, before=before, after=payload.model_dump(exclude_unset=True))
+    await write_audit(db, user.id, "update", "employee", employee.id, before=before, after=payload.model_dump(mode="json", exclude_unset=True))
     await db.commit()
     return EmployeeOut.model_validate(employee)
 

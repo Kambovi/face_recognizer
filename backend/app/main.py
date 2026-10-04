@@ -14,6 +14,8 @@ from app.routers import (
     alerts,
     chat,
     devices,
+    holidays,
+    payroll,
     users,
     hq,
     leaves,
@@ -115,7 +117,7 @@ if settings.cors_origin_list:
 
 
 @app.middleware("http")
-async def security_headers(request: Request, call_next):  # type: ignore[no-untyped-def]
+async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
@@ -168,3 +170,5 @@ app.include_router(chat.router, prefix=API_PREFIX)
 app.include_router(leaves.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(devices.router, prefix=API_PREFIX)
+app.include_router(holidays.router, prefix=API_PREFIX)
+app.include_router(payroll.router, prefix=API_PREFIX)

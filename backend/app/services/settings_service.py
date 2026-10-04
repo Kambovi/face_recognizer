@@ -63,6 +63,43 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Go-live date (YYYY-MM-DD). Days before it are "not tracked" (NT, paid)
     # instead of absent. Set automatically on upgrade; editable in Settings.
     "attendance_start_date": None,
+    # --- Statutory payroll (services/payroll.py) -- verify with your CA ---
+    # Professional-tax state code (MH KA WB GJ TG AP MP OD BR JH TN KL ...),
+    # "" = no PT (Delhi, UP, Haryana, Rajasthan, Punjab ...).
+    "payroll_state": "",
+    # calendar = monthly / days-in-month x paid days; fixed26 = monthly / 26 per LOP day
+    "payroll_proration": "calendar",
+    # People with only a gross salary: basic = this % of gross (labour codes:
+    # basic + DA should be >= 50%), HRA = % of basic, rest = special allowance.
+    "payroll_basic_percent": 50,
+    "payroll_hra_percent": 40,
+    "pf_enabled": True,
+    "pf_employee_rate": 12.0,
+    "pf_employer_rate": 12.0,
+    "eps_rate": 8.33,
+    "edli_rate": 0.5,
+    "pf_admin_rate": 0.5,
+    # EPF wage ceiling by effective date (Rs 25,000 from 17-Sep-2026).
+    "pf_wage_ceiling_history": [
+        {"from": "2014-09-01", "ceiling": 15000},
+        {"from": "2026-09-17", "ceiling": 25000},
+    ],
+    "esi_enabled": True,
+    "esi_wage_limit": 21000,
+    "esi_employee_rate": 0.75,
+    "esi_employer_rate": 3.25,
+    # Labour codes (21-Nov-2025): if HRA/conveyance/OT/other allowances exceed
+    # 50% of total pay, the excess counts as wages for PF.
+    "labour_code_wages": True,
+    # OT pay (Factories Act: 2x ordinary rate). hourly = gross / (days x hours)
+    "ot_pay_enabled": False,
+    "ot_pay_multiplier": 2.0,
+    "ot_rate_divisor_days": 26,
+    "ot_rate_hours_per_day": 8,
+    # Own PT slabs override: {"MH": {"period": "monthly", "slabs": [[upto, amount], ...]}}
+    "pt_slabs_custom": {},
+    # Leave year: 1 = Jan-Dec, 4 = Apr-Mar
+    "leave_year_start_month": 1,
     # Leave types for the leave register + balances (services/leave_balance.py).
     # paid=False -> LWP. annual = days per calendar year (credited pro-rata
     # monthly when accrual is "monthly"). carry_forward = max days carried

@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _weekdays(v: list[int] | None) -> list[int] | None:
+    if v is None:
+        return None
+    if any(not 0 <= int(x) <= 6 for x in v):
+        raise ValueError("weekly_off_days are weekdays 0 (Mon) .. 6 (Sun)")
+    return sorted({int(x) for x in v})
 
 
 class ShiftOut(BaseModel):
@@ -25,6 +33,11 @@ class EmployeeCreate(BaseModel):
     home_kiosk_id: str | None = None
     contractor: str | None = Field(default=None, max_length=120)
     monthly_salary: float | None = Field(default=None, ge=0, le=100_000_000)
+    date_of_joining: date | None = None
+    date_of_leaving: date | None = None
+    weekly_off_days: list[int] | None = None
+
+    _wo = field_validator("weekly_off_days")(classmethod(lambda cls, v: _weekdays(v)))
 
 
 class EmployeeUpdate(BaseModel):
@@ -37,6 +50,11 @@ class EmployeeUpdate(BaseModel):
     watchlist_reason: str | None = Field(default=None, max_length=500)
     monthly_salary: float | None = Field(default=None, ge=0, le=100_000_000)
     is_active: bool | None = None
+    date_of_joining: date | None = None
+    date_of_leaving: date | None = None
+    weekly_off_days: list[int] | None = None
+
+    _wo = field_validator("weekly_off_days")(classmethod(lambda cls, v: _weekdays(v)))
 
 
 class EmployeeOut(BaseModel):
@@ -53,6 +71,9 @@ class EmployeeOut(BaseModel):
     monthly_salary: float | None = None
     is_active: bool
     created_at: datetime
+    date_of_joining: date | None = None
+    date_of_leaving: date | None = None
+    weekly_off_days: list[int] | None = None
     template_count: int = 0
 
     model_config = {"from_attributes": True}

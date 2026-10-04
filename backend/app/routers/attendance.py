@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
@@ -21,6 +21,7 @@ from app.schemas.attendance import (
     ReassignRequest,
 )
 from app.services.attendance import reassign_single_event
+from app.services.payroll_lock import ensure_unlocked
 from app.services.audit import write_audit
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
@@ -81,6 +82,7 @@ async def manual_override(
     if event is None:
         raise http_error(404, "event_not_found", "Attendance event not found")
 
+    await ensure_unlocked(db, _day(event.occurred_at), *([_day(payload.occurred_at)] if payload.occurred_at else []))
     before = {"event_type": event.event_type.value, "occurred_at": event.occurred_at.isoformat()}
     if payload.event_type:
         from app.models.enums import EventType
@@ -112,6 +114,7 @@ async def reassign_event(
     if payload.target_type in ("EMPLOYEE", "UNKNOWN") and not payload.target_id:
         raise http_error(422, "target_id_required", "target_id is required for this target_type")
 
+    await ensure_unlocked(db, _day(event.occurred_at))
     before = {"employee_id": event.employee_id, "unknown_identity_id": event.unknown_identity_id}
     updated = await reassign_single_event(db, event, payload.target_type, payload.target_id, payload.reason, user.email)
 
@@ -126,6 +129,10 @@ async def reassign_event(
 MANUAL_KIOSK_ID = "manual"
 
 
+def _day(ts: datetime) -> date:
+    return (ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)).astimezone(LOCAL_TZ).date()
+
+
 @router.post("/events/manual", response_model=AttendanceEventOut, status_code=201)
 async def create_manual_event(
     payload: ManualEventCreate,
@@ -137,6 +144,7 @@ async def create_manual_event(
     ).scalar_one_or_none()
     if employee is None:
         raise http_error(404, "employee_not_found", "Employee not found")
+    await ensure_unlocked(db, _day(payload.occurred_at))
     event = AttendanceEvent(
         subject_type=SubjectType.EMPLOYEE,
         employee_id=employee.id,
